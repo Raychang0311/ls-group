@@ -1938,18 +1938,10 @@
             countDisplay.textContent = `${currentCount} / ${maxLimit === 99 ? '不限' : maxLimit}`;
         }
 
-        // 主揪專屬按鈕 HTML
-        const hostEditBtnHtml = isHost ? `
-            <button type="button" class="btn-act btn-edit-group" onclick="handleEditGroup()">
-                🛠️ 修改揪團
-            </button>
-        ` : '';
-
         if (isJoined) {
             // 已報名狀態：填入現有備註
             if (noteInput) noteInput.value = existingMember.note || '';
             btnRow.innerHTML = `
-                ${hostEditBtnHtml}
                 <button type="button" class="btn-act btn-update-note" onclick="handleUpdateNote()">
                     ✏️ 更新備註
                 </button>
@@ -1962,14 +1954,12 @@
             if (noteInput) noteInput.value = '';
             if (isFull) {
                 btnRow.innerHTML = `
-                    ${hostEditBtnHtml}
                     <button type="button" class="btn-act btn-full" disabled>
                         ❌ 人數已額滿 (${currentCount}/${maxLimit})
                     </button>
                 `;
             } else {
                 btnRow.innerHTML = `
-                    ${hostEditBtnHtml}
                     <button type="button" class="btn-act btn-join" onclick="handleJoinGroup()">
                         🙋‍♂️ 立即報名
                     </button>
