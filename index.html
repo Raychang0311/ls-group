@@ -1225,7 +1225,6 @@
         <div class="action-card-header">
             <div class="action-card-title">
                 <span>📝 報名與參與狀態</span>
-                <span class="host-badge-tag" id="hostBadge" style="display: none;">👑 本團主揪</span>
             </div>
             <span class="auth-status-badge badge-guest" id="authBadge" onclick="handleAuthClick()" style="cursor: pointer;" title="點擊登入 LINE 以確認身分">訪客模式 (點此登入)</span>
         </div>
@@ -1247,7 +1246,7 @@
                     <span class="host-control-icon">👑</span>
                     <div class="host-control-text">
                         <div class="host-control-title">您是本活動主揪</div>
-                        <div class="host-control-desc">可直接切換至編輯頁面修改時間、地點或揪團內容</div>
+                        <div class="host-control-desc">可直接切換至編輯頁面修改揪團內容</div>
                     </div>
                 </div>
                 <button type="button" class="btn-host-edit" onclick="handleEditGroup()">
@@ -1906,8 +1905,6 @@
     function refreshUserActionArea() {
         if (!currentUserId) {
             updateAuthUI(false);
-            const hostBadge = document.getElementById('hostBadge');
-            if (hostBadge) hostBadge.style.display = 'none';
             const hostControlBox = document.getElementById('hostControlBox');
             if (hostControlBox) hostControlBox.style.display = 'none';
             return;
@@ -1919,11 +1916,7 @@
         const isHost = !!(currentGroupData && currentGroupData.hostId &&
             String(currentUserId).trim().toLowerCase() === String(currentGroupData.hostId).trim().toLowerCase());
 
-        // 同步主揪專屬標章與快捷控制卡
-        const hostBadge = document.getElementById('hostBadge');
-        if (hostBadge) {
-            hostBadge.style.display = isHost ? 'inline-flex' : 'none';
-        }
+        // 同步主揪快捷控制卡
         const hostControlBox = document.getElementById('hostControlBox');
         if (hostControlBox) {
             hostControlBox.style.display = isHost ? 'flex' : 'none';
@@ -1945,10 +1938,18 @@
             countDisplay.textContent = `${currentCount} / ${maxLimit === 99 ? '不限' : maxLimit}`;
         }
 
+        // 主揪專屬按鈕 HTML
+        const hostEditBtnHtml = isHost ? `
+            <button type="button" class="btn-act btn-edit-group" onclick="handleEditGroup()">
+                🛠️ 修改揪團
+            </button>
+        ` : '';
+
         if (isJoined) {
             // 已報名狀態：填入現有備註
             if (noteInput) noteInput.value = existingMember.note || '';
             btnRow.innerHTML = `
+                ${hostEditBtnHtml}
                 <button type="button" class="btn-act btn-update-note" onclick="handleUpdateNote()">
                     ✏️ 更新備註
                 </button>
@@ -1961,12 +1962,14 @@
             if (noteInput) noteInput.value = '';
             if (isFull) {
                 btnRow.innerHTML = `
+                    ${hostEditBtnHtml}
                     <button type="button" class="btn-act btn-full" disabled>
                         ❌ 人數已額滿 (${currentCount}/${maxLimit})
                     </button>
                 `;
             } else {
                 btnRow.innerHTML = `
+                    ${hostEditBtnHtml}
                     <button type="button" class="btn-act btn-join" onclick="handleJoinGroup()">
                         🙋‍♂️ 立即報名
                     </button>
