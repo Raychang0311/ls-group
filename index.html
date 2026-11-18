@@ -1,0 +1,2379 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <base target="_top">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+    <title>揪團詳情</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <script>
+        // 若在 GAS 樣板環境下由後端注入，否則維持空字串 (避免在靜態環境下引發語法錯誤)
+        window.SERVER_USER_ID = ("<?= typeof serverUserId !== 'undefined' ? serverUserId : '' ?>".startsWith("<?=") ? "" : "<?= typeof serverUserId !== 'undefined' ? serverUserId : '' ?>");
+        window.SERVER_SEQ_ID = ("<?= typeof serverSeqId !== 'undefined' ? serverSeqId : '' ?>".startsWith("<?=") ? "" : "<?= typeof serverSeqId !== 'undefined' ? serverSeqId : '' ?>");
+    </script>
+
+    <style>
+        :root {
+            --primary: #4a8c72;
+            --primary-color: #4a8c72;
+            --primary-dark: #3a6e59;
+            --primary-light: #e8f5e9;
+            --accent: #0D9488;
+            --bg: #f0f4f3;
+            --bg-color: #f0f4f3;
+            --card-bg: #ffffff;
+            --text-main: #1f2937;
+            --text-sub: #6b7280;
+            --accent-blue: #007bff;
+            --google-blue: #4285F4;
+            --danger-red: #e53e3e;
+            --border-color: #e5e7eb;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            margin: 0;
+            padding: 16px 12px 60px;
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            line-height: 1.6;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        /* Loading 動畫區塊 */
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255,255,255,0.92);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            transition: opacity 0.4s ease;
+        }
+
+        .spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid #ddd;
+            border-top-color: var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* 主容器 */
+        .container {
+            width: 100%;
+            max-width: 620px;
+            opacity: 0;
+            transform: translateY(16px);
+            transition: opacity 0.5s ease, transform 0.5s ease;
+        }
+
+        .container.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* 卡片樣式 */
+        .card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 22px;
+            margin-bottom: 18px;
+            box-shadow: 0 4px 18px rgba(0,0,0,0.05);
+        }
+
+        /* 標題區 */
+        .header-section h1 {
+            font-size: 1.45rem;
+            margin: 0 0 10px 0;
+            color: var(--text-main);
+            font-weight: 700;
+            line-height: 1.4;
+        }
+
+        .date-badge {
+            display: inline-block;
+            background-color: var(--primary-light);
+            color: var(--primary-color);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        /* 內容區 */
+        .content-text {
+            font-size: 0.98rem;
+            color: var(--text-main);
+            white-space: pre-wrap;
+            word-break: break-word;
+            line-height: 1.65;
+        }
+
+        .content-text a {
+            color: var(--accent-blue);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        /* 地點與地圖樣式 */
+        .location-card {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 18px;
+        }
+
+        .location-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+            gap: 10px;
+        }
+
+        .location-title {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            font-size: 0.98rem;
+            font-weight: 700;
+            color: var(--text-main);
+            flex: 1;
+            min-width: 0;
+        }
+
+        .location-icon {
+            flex-shrink: 0;
+            font-size: 1.1rem;
+            line-height: 1.4;
+        }
+
+        .location-title span#locationName {
+            word-break: break-word;
+            overflow-wrap: break-word;
+            white-space: normal;
+            line-height: 1.4;
+        }
+
+        .location-action-btn {
+            flex-shrink: 0;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--primary-color);
+            background-color: #e8f5e9;
+            padding: 5px 12px;
+            border-radius: 8px;
+            text-decoration: none;
+            white-space: nowrap;
+            transition: all 0.2s;
+            margin-top: 1px;
+        }
+
+        .location-action-btn:hover {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .map-container {
+            position: relative;
+            width: 100%;
+            height: 180px;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid #cbd5e1;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+            cursor: pointer;
+        }
+
+        #mapView {
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .leaflet-control-attribution {
+            display: none !important;
+        }
+
+        .map-click-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding-bottom: 8px;
+            background: linear-gradient(to top, rgba(0,0,0,0.35) 0%, transparent 60%);
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .map-container:hover .map-click-overlay {
+            background: linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 70%);
+        }
+
+        .map-overlay-badge {
+            background: rgba(255, 255, 255, 0.95);
+            color: var(--text-main);
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 4px 12px;
+            border-radius: 20px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* 雙日曆加入按鈕組 */
+        .calendar-action-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        @media (max-width: 480px) {
+            .calendar-action-group {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .btn-calendar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            text-decoration: none;
+            font-size: 0.92rem;
+            font-weight: 700;
+            transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+            text-align: center;
+        }
+
+        .btn-calendar:active {
+            transform: scale(0.97);
+        }
+
+        .btn-gcal {
+            background-color: var(--google-blue);
+            color: #ffffff;
+            box-shadow: 0 4px 14px rgba(66, 133, 244, 0.35);
+        }
+
+        .btn-ical {
+            background-color: #2e7d32;
+            color: #ffffff;
+            box-shadow: 0 4px 14px rgba(46, 125, 50, 0.3);
+        }
+
+        .btn-calendar.disabled {
+            background-color: #cbd5e1;
+            color: #64748b;
+            pointer-events: none;
+            box-shadow: none;
+        }
+
+        /* 報名與使用者操作卡片 (Action Card) */
+        .action-card {
+            border: 2px solid #e0ece6;
+            background: #ffffff;
+        }
+
+        .action-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .action-card-title {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--primary-dark);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .auth-status-badge {
+            font-size: 0.75rem;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+
+        .badge-verified {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .badge-guest {
+            background-color: #fff3e0;
+            color: #e65100;
+        }
+
+        /* 訪客提示盒 (電腦或未登入) */
+        .guest-notice-box {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            background: #fff8e1;
+            border: 1px solid #ffe082;
+            border-radius: 10px;
+            padding: 12px 14px;
+            font-size: 0.88rem;
+            color: #795548;
+            line-height: 1.5;
+        }
+
+        .guest-notice-icon {
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+
+        /* 報名備註輸入框 */
+        .note-input-wrap {
+            margin-bottom: 12px;
+        }
+
+        .note-input-label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-sub);
+            margin-bottom: 6px;
+        }
+
+        .note-input-field {
+            width: 100%;
+            padding: 10px 12px;
+            font-size: 0.95rem;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            background: #f8fafc;
+            outline: none;
+            transition: border-color 0.2s, background 0.2s;
+        }
+
+        .note-input-field:focus {
+            border-color: var(--primary-color);
+            background: #ffffff;
+            box-shadow: 0 0 0 3px rgba(74, 140, 114, 0.15);
+        }
+
+        .action-button-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-act {
+            flex: 1;
+            padding: 12px 16px;
+            border: none;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .btn-act:active {
+            transform: scale(0.97);
+        }
+
+        .btn-join {
+            background-color: var(--primary-color);
+            color: white;
+            box-shadow: 0 4px 12px rgba(74, 140, 114, 0.35);
+        }
+
+        .btn-update-note {
+            background-color: #0284c7;
+            color: white;
+            box-shadow: 0 4px 12px rgba(2, 132, 199, 0.3);
+        }
+
+        .btn-leave {
+            background-color: #fff;
+            color: var(--danger-red);
+            border: 1px solid var(--danger-red);
+        }
+
+        .btn-leave:hover {
+            background-color: #fff5f5;
+        }
+
+        .btn-full {
+            background-color: #cbd5e1;
+            color: #64748b;
+            cursor: not-allowed;
+        }
+
+        /* 參加者區塊標題列 */
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .count-badge {
+            font-size: 0.82rem;
+            background: #e2e8f0;
+            padding: 3px 10px;
+            border-radius: 12px;
+            color: var(--text-sub);
+            font-weight: 600;
+        }
+
+        .btn-tag {
+            background-color: transparent;
+            border: 1px solid var(--primary-color);
+            color: var(--primary-color);
+            padding: 5px 14px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-tag:hover {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        /* 參加者網格 */
+        .member-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(85px, 1fr));
+            gap: 16px;
+        }
+
+        .member-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            opacity: 0;
+            animation: fadeInUp 0.4s forwards;
+        }
+
+        .avatar-container {
+            position: relative;
+            cursor: pointer;
+        }
+
+        .member-avatar {
+            width: 62px;
+            height: 62px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid #ffffff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: block;
+        }
+
+        .avatar-container:hover .member-avatar {
+            transform: scale(1.08);
+            box-shadow: 0 4px 12px rgba(74, 140, 114, 0.3);
+        }
+
+        .my-self-badge {
+            position: absolute;
+            bottom: -2px;
+            right: -2px;
+            background: var(--primary-color);
+            color: #ffffff;
+            font-size: 0.65rem;
+            font-weight: 700;
+            padding: 1px 5px;
+            border-radius: 8px;
+            border: 2px solid #ffffff;
+        }
+
+        .member-name {
+            margin-top: 8px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-main);
+            width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .member-note {
+            position: relative;
+            margin-top: 10px;
+            font-size: 0.75rem;
+            color: var(--primary-dark);
+            background-color: #eaf4ef;
+            border: 1px solid #c5e3d5;
+            border-radius: 8px;
+            padding: 8px 6px 5px 6px;
+            width: 100%;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+            cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s;
+            user-select: none;
+            text-align: center;
+        }
+
+        .member-note:hover {
+            background-color: #dfede6;
+        }
+
+        .member-note-btn {
+            position: absolute;
+            top: -9px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.62rem;
+            color: #ffffff;
+            background-color: var(--primary-color);
+            padding: 1px 7px;
+            border-radius: 10px;
+            font-weight: 600;
+            white-space: nowrap;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.12);
+        }
+
+        .member-note-text {
+            display: block;
+            word-break: break-word;
+            line-height: 1.3;
+        }
+
+        /* 備註歷史 Modal 樣式 */
+        .history-list {
+            max-height: 280px;
+            overflow-y: auto;
+            margin: 15px 0;
+            padding-right: 4px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .history-item {
+            background: #f8f9fa;
+            border-left: 4px solid #ccc;
+            border-radius: 8px;
+            padding: 10px 12px;
+            text-align: left;
+        }
+
+        .history-item.latest {
+            border-left-color: var(--primary-color);
+            background: #f0f7f4;
+        }
+
+        .history-note {
+            font-size: 0.95rem;
+            color: var(--text-main);
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+
+        .history-time {
+            font-size: 0.75rem;
+            color: var(--text-sub);
+            margin-top: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .latest-badge {
+            background-color: var(--primary-color);
+            color: white;
+            font-size: 0.65rem;
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+
+        /* 通用 Lightbox 遮罩 */
+        .lightbox {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.75);
+            z-index: 3000;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            backdrop-filter: blur(2px);
+            padding: 16px;
+        }
+
+        .lightbox.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .modal-panel {
+            background: white;
+            width: 100%;
+            max-width: 440px;
+            border-radius: 18px;
+            padding: 24px 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            transform: scale(0.92);
+            transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .lightbox.active .modal-panel {
+            transform: scale(1);
+        }
+
+        .modal-title {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin-bottom: 15px;
+            text-align: center;
+            color: var(--text-main);
+        }
+
+        .tag-textarea {
+            width: 100%;
+            height: 180px;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            resize: none;
+            font-size: 0.95rem;
+            color: #333;
+            background-color: #f9f9f9;
+            margin-bottom: 15px;
+        }
+
+        .tag-textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            background-color: #fff;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+
+        .btn-modal {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.95rem;
+        }
+
+        .btn-copy {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn-close {
+            background-color: #e2e8f0;
+            color: #333;
+        }
+
+        /* 個人數位名片 Modal (同步 members/index.html 格式) */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.65);
+            z-index: 3000;
+            justify-content: center;
+            align-items: center;
+            padding: 16px;
+            backdrop-filter: blur(3px);
+            opacity: 0;
+            transition: opacity 0.25s ease;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .profile-card-modal {
+            position: relative;
+            background: #ffffff;
+            width: 100%;
+            max-width: 420px;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 12px 35px rgba(0,0,0,0.25);
+            transform: scale(0.92);
+            transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-overlay.active .profile-card-modal {
+            transform: scale(1);
+        }
+
+        .modal-header-bg {
+            background: linear-gradient(135deg, #3a6e59, #4a8c72, #0D9488);
+            padding: 24px 20px 20px;
+            text-align: center;
+            color: #ffffff;
+            position: relative;
+        }
+
+        .modal-close-btn {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            background: rgba(0, 0, 0, 0.2);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+
+        .modal-close-btn:hover {
+            background: rgba(0, 0, 0, 0.4);
+        }
+
+        .modal-avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid #ffffff;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            margin: 0 auto 10px;
+            display: block;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .modal-avatar:hover {
+            transform: scale(1.05);
+        }
+
+        .modal-user-name {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .modal-user-sub {
+            font-size: 0.8rem;
+            opacity: 0.9;
+        }
+
+        .modal-body {
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        /* 徽章勳章牆 */
+        .section-label {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-sub);
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .badges-wrap {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .badge-pill {
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 12px;
+            background: #f3f4f6;
+            color: #374151;
+            border: 1px solid #e5e7eb;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.15s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .badge-pill:hover, .badge-pill:active {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+            border-color: #cbd5e1;
+        }
+
+        .badge-pill.gold {
+            background: #fef3c7;
+            color: #92400e;
+            border-color: #fde68a;
+        }
+
+        .badge-pill.gold:hover {
+            border-color: #f59e0b;
+        }
+
+        .badge-pill.champion {
+            background: #fdf2f8;
+            color: #9d174d;
+            border-color: #fbcfe8;
+        }
+
+        .badge-pill.champion:hover {
+            border-color: #ec4899;
+        }
+
+        /* 稱號來源 Tooltip 懸浮氣泡 */
+        .badge-tooltip {
+            position: absolute;
+            z-index: 1000;
+            background: #111827;
+            color: #ffffff;
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-size: 0.82rem;
+            line-height: 1.45;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+            max-width: 280px;
+            pointer-events: auto;
+            opacity: 0;
+            transform: scale(0.95);
+            transition: opacity 0.15s ease, transform 0.15s ease;
+            display: none;
+            border: 1px solid #374151;
+        }
+
+        .badge-tooltip.active {
+            display: block;
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .badge-tooltip-title {
+            font-weight: 700;
+            color: #34d399;
+            font-size: 0.88rem;
+        }
+
+        .badge-tooltip-desc {
+            color: #e5e7eb;
+            font-size: 0.8rem;
+            margin-top: 2px;
+        }
+
+        .badge-tooltip::before {
+            content: '';
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: #111827;
+            transform: rotate(45deg);
+            border: 1px solid #374151;
+        }
+
+        .badge-tooltip.arrow-down::before {
+            bottom: -6px;
+            left: var(--arrow-left, 50%);
+            margin-left: -5px;
+            border-top: none;
+            border-left: none;
+        }
+
+        .badge-tooltip.arrow-up::before {
+            top: -6px;
+            left: var(--arrow-left, 50%);
+            margin-left: -5px;
+            border-bottom: none;
+            border-right: none;
+        }
+
+        /* 個人詳細資訊卡 */
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 12px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .info-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .info-cell-title {
+            font-size: 0.75rem;
+            color: var(--text-sub);
+        }
+
+        .info-cell-val {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-main);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* 自我介紹區 */
+        .bio-box {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 12px;
+            padding: 12px 14px;
+            font-size: 0.9rem;
+            color: #166534;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        /* 活動與活躍統計網格 (8宮格) */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 12px 6px;
+            border: 1px solid #e2e8f0;
+            text-align: center;
+        }
+
+        .stat-block {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .stat-block .stat-num {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--primary-dark);
+            line-height: 1.2;
+        }
+
+        .stat-block .stat-lbl {
+            font-size: 0.68rem;
+            color: var(--text-sub);
+            margin-top: 3px;
+            white-space: nowrap;
+        }
+
+        .stat-block.highlight-day .stat-num {
+            color: #059669;
+        }
+
+        .stat-block.highlight-month .stat-num {
+            color: #0284c7;
+        }
+
+        .stat-block.highlight-year .stat-num {
+            color: #7c3aed;
+        }
+
+        .btn-guest-login {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: #06c755;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 3px 10px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+        .btn-guest-login:hover {
+            background: #05b04c;
+        }
+
+        /* 圖片放大 Lightbox */
+        #img-lightbox img {
+            max-width: 90%;
+            max-height: 80vh;
+            border-radius: 12px;
+            box-shadow: 0 0 24px rgba(255,255,255,0.15);
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .error-msg {
+            text-align: center;
+            color: #d9534f;
+            margin-top: 50px;
+            padding: 20px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div id="loading">
+    <div class="spinner"></div>
+    <p style="margin-top: 12px; color: #555; font-weight: 500;">讀取活動資訊中...</p>
+</div>
+
+<div class="container" id="mainContainer">
+
+    <!-- 活動詳情卡片 -->
+    <div class="card">
+        <div class="header-section">
+            <div class="date-badge" id="date"></div>
+            <h1 id="title"></h1>
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid #eee; margin: 15px 0;">
+
+        <!-- 地點資訊與小地圖預覽區塊 -->
+        <div id="locationCard" class="location-card" style="display: none;">
+            <div class="location-header">
+                <div class="location-title">
+                    <span class="location-icon">📍</span>
+                    <span id="locationName"></span>
+                </div>
+                <a id="locationMapLink" href="#" target="_blank" class="location-action-btn">開啟地圖 ↗</a>
+            </div>
+            <div id="locationAddress" style="display: none; font-size: 0.85rem; color: var(--text-sub); margin: 4px 0 8px 24px; line-height: 1.4;"></div>
+            <div class="map-container" id="mapContainer" onclick="openLocationMap()" title="點擊在 Google 地圖中開啟">
+                <div id="mapView"></div>
+                <div class="map-click-overlay">
+                    <div class="map-overlay-badge">
+                        <span>🗺️ 點擊開啟 Google 地圖</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 揪團內容說明 -->
+        <div class="content-text" id="content"></div>
+
+        <!-- 雙日曆一鍵加入按鈕區 -->
+        <div class="calendar-action-group">
+            <a id="googleCalButton" href="#" target="_blank" class="btn-calendar btn-gcal disabled">
+                <span>📅 Google 日曆 (一鍵加入)</span>
+            </a>
+            <a id="eventButton" href="#" target="_blank" class="btn-calendar btn-ical disabled">
+                <span>🍏 Apple / 下載 .ics</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- 報名操作卡片 (直接報名/改備註/退出) -->
+    <div class="card action-card" id="userActionCard">
+        <div class="action-card-header">
+            <div class="action-card-title">
+                <span>📝 報名與參與狀態</span>
+            </div>
+            <span class="auth-status-badge badge-guest" id="authBadge" onclick="handleAuthClick()" style="cursor: pointer;" title="點擊登入 LINE 以確認身分">訪客模式 (點此登入)</span>
+        </div>
+
+        <!-- 訪客/電腦模式提示 (未通過 LIFF 驗證時顯示) -->
+        <div id="guestNotice" class="guest-notice-box" style="display: none;">
+            <div class="guest-notice-icon">💡</div>
+            <div class="guest-notice-text">
+                目前為訪客預覽模式。如需報名、退出或填寫備註，請於手機 LINE 聊天室內點擊開啟，或
+                <button type="button" class="btn-guest-login" onclick="handleAuthClick()">🔑 登入 LINE</button>
+            </div>
+        </div>
+
+        <!-- LINE 登入驗證成功之成員操作區 -->
+        <div id="memberActionArea" style="display: none;">
+            <div class="note-input-wrap">
+                <label for="userActionNote" class="note-input-label">活動備註 (選填，例如：開車+1、晚到半小時)</label>
+                <input type="text" id="userActionNote" class="note-input-field" maxlength="50" placeholder="請輸入備註文字...">
+            </div>
+            <div class="action-button-row" id="actionBtnRow">
+                <!-- 動態注入報名/改備註/退出按鈕 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 參加者名單卡片 -->
+    <div class="card">
+        <div class="section-header">
+            <div class="section-title">
+                參加者
+                <span class="count-badge" id="countDisplay">0 / 0</span>
+            </div>
+            <button class="btn-tag" onclick="openTagModal()">標記全員</button>
+        </div>
+
+        <div class="member-grid" id="joinedList"></div>
+    </div>
+
+</div>
+
+<!-- 圖片放大 Lightbox -->
+<div id="img-lightbox" class="lightbox" onclick="closeImgLightbox()">
+    <img id="lightbox-image" onclick="event.stopPropagation()">
+</div>
+
+<!-- 複製全員標記 Lightbox -->
+<div id="tag-lightbox" class="lightbox" onclick="closeTagModal()">
+    <div class="modal-panel" onclick="event.stopPropagation()">
+        <div class="modal-title">複製參加者標記</div>
+        <textarea id="tagTextarea" class="tag-textarea" readonly></textarea>
+        <div class="modal-actions">
+            <button class="btn-modal btn-close" onclick="closeTagModal()">關閉</button>
+            <button id="btnCopy" class="btn-modal btn-copy" onclick="copyTagText()">複製</button>
+        </div>
+    </div>
+</div>
+
+<!-- 備註修改歷史 Lightbox -->
+<div id="note-history-lightbox" class="lightbox" onclick="closeNoteHistoryModal()">
+    <div class="modal-panel" onclick="event.stopPropagation()">
+        <div class="modal-title" id="noteHistoryTitle">備註修改歷史</div>
+        <div class="history-list" id="noteHistoryList"></div>
+        <div class="modal-actions">
+            <button class="btn-modal btn-close" onclick="closeNoteHistoryModal()">關閉</button>
+        </div>
+    </div>
+</div>
+
+<!-- 點擊頭像彈出之個人數位名片 Lightbox (同步 members/index.html 格式) -->
+<div class="modal-overlay" id="profileModalOverlay" onclick="closeProfileModal()">
+    <div class="profile-card-modal" onclick="handleCardClick(event)">
+        <!-- 稱號來源 Tooltip 氣泡 -->
+        <div class="badge-tooltip" id="badgeTooltip" onclick="event.stopPropagation()">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                <span class="badge-tooltip-title" id="badgeTooltipTitle">稱號名稱</span>
+                <span onclick="hideBadgeTooltip()" style="cursor: pointer; color: #9ca3af; font-size: 1rem; line-height: 1; padding: 2px 6px;">✕</span>
+            </div>
+            <div class="badge-tooltip-desc" id="badgeTooltipDesc">來源說明...</div>
+        </div>
+
+        <div class="modal-header-bg">
+            <button class="modal-close-btn" onclick="closeProfileModal()">✕</button>
+            <img id="cardAvatar" class="modal-avatar" src="" alt="avatar" onclick="showImgLightbox(this.src)" title="點擊放大頭像">
+            <div class="modal-user-name" id="cardName">載入中...</div>
+            <div class="modal-user-sub" id="cardJoinDays">入群天數計算中...</div>
+        </div>
+
+        <div class="modal-body">
+            <!-- 資訊網格 (星座、居住地、職業、感情狀態、入群日期) -->
+            <div class="info-grid">
+                <div class="info-cell">
+                    <span class="info-cell-title">✨ 星座</span>
+                    <span class="info-cell-val" id="cardZodiac">--</span>
+                </div>
+                <div class="info-cell">
+                    <span class="info-cell-title">📍 居住地</span>
+                    <span class="info-cell-val" id="cardResidence">--</span>
+                </div>
+                <div class="info-cell">
+                    <span class="info-cell-title">💼 職業</span>
+                    <span class="info-cell-val" id="cardOccupation">--</span>
+                </div>
+                <div class="info-cell">
+                    <span class="info-cell-title">💖 感情狀態</span>
+                    <span class="info-cell-val" id="cardRelationship">--</span>
+                </div>
+                <div class="info-cell" style="grid-column: span 2;">
+                    <span class="info-cell-title">📅 入群日期</span>
+                    <span class="info-cell-val" id="cardJoinDate">--</span>
+                </div>
+            </div>
+
+            <!-- 自我介紹 -->
+            <div>
+                <div class="section-label">📝 自我介紹</div>
+                <div class="bio-box" id="cardBio">載入自介中...</div>
+            </div>
+
+            <!-- 榮譽勳章牆 -->
+            <div>
+                <div class="section-label">🏆 成就勳章牆 <span style="font-size:0.75rem;font-weight:normal;color:#9ca3af;margin-left:4px;">(點擊稱號看來源)</span></div>
+                <div class="badges-wrap" id="cardBadges"></div>
+            </div>
+
+            <!-- 社群活動與發言統計 -->
+            <div>
+                <div class="section-label">📊 社群活動與活躍統計</div>
+                <div class="stats-grid">
+                    <div class="stat-block">
+                        <div class="stat-num" id="statHost">0</div>
+                        <div class="stat-lbl">主辦揪團</div>
+                    </div>
+                    <div class="stat-block">
+                        <div class="stat-num" id="statJoin">0</div>
+                        <div class="stat-lbl">參加揪團</div>
+                    </div>
+                    <div class="stat-block">
+                        <div class="stat-num" id="statMsg">0</div>
+                        <div class="stat-lbl">總發言數</div>
+                    </div>
+                    <div class="stat-block">
+                        <div class="stat-num" id="statSticker">0</div>
+                        <div class="stat-lbl">貼圖統計</div>
+                    </div>
+                    <div class="stat-block">
+                        <div class="stat-num" id="statUnsend">0</div>
+                        <div class="stat-lbl">收回訊息</div>
+                    </div>
+                    <div class="stat-block highlight-day">
+                        <div class="stat-num" id="statDailyMsg">0</div>
+                        <div class="stat-lbl">本日活躍</div>
+                    </div>
+                    <div class="stat-block highlight-month">
+                        <div class="stat-num" id="statMonthMsg">0</div>
+                        <div class="stat-lbl">本月活躍</div>
+                    </div>
+                    <div class="stat-block highlight-year">
+                        <div class="stat-num" id="statYearMsg">0</div>
+                        <div class="stat-lbl">年度活躍</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // =========================================================================
+    // 方案 A 前後端分離配置 (GitHub Pages 前端 + Google Apps Script 後端 API)
+    // =========================================================================
+    // 請將下方網址替換為您的 Google Apps Script Web App 部署網址 (必須為 /exec 結尾)
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzrQGg-d-wwhAOk5ma4uRI50dDNaEqin-ttrRqZ1En2/dev";
+    const DEFAULT_LIFF_ID = "2005700153-GqMvVinD";
+
+    // 全域變數
+    let currentSeqId = null;
+    let currentUserId = null;
+    let currentDisplayName = null;
+    let currentGroupData = null;
+    let globalJoinedList = [];
+    let globalJoinedNotesHistory = [];
+    let globalJoinedNotes = {};
+    let targetMapUrl = '';
+    let leafletMap = null;
+    let serverTitleConfig = null;
+
+    // 前端預設稱號門檻與說明配置 (作為後端載入前或未知稱號的 Fallback 備援)
+    const DEFAULT_TITLE_CONFIG = {
+        hostTiers: [
+            { min: 15, name: "揪團之神", desc: "舉辦揪團累計達 15 次以上，社群主揪至尊榮耀！" },
+            { min: 7,  name: "揪團達人", desc: "舉辦揪團累計達 7 次以上，超活躍主辦達人！" },
+            { min: 3,  name: "揪團熟手", desc: "舉辦揪團累計達 3 次以上，熱心開團好夥伴！" },
+            { min: 1,  name: "揪團菜鳥", desc: "初次發起揪團活動，熱血踏出第一步！" }
+        ],
+        joinTiers: [
+            { min: 100, name: "參團之神", desc: "累計參加揪團活動達 100 次以上，聚會靈魂神級人物！" },
+            { min: 50,  name: "參團達人", desc: "累計參加揪團活動達 50 次以上，場場不落的聚會核心！" },
+            { min: 20,  name: "參團常客", desc: "累計參加揪團活動達 20 次以上，社群聚會熟面孔！" },
+            { min: 5,   name: "參團熟手", desc: "累計參加揪團活動達 5 次以上，積極參與社群生活！" },
+            { min: 1,   name: "參團菜鳥", desc: "累計參加揪團活動達 1 次以上，聚會初體驗達成！" }
+        ],
+        unsendTiers: [
+            { min: 200, name: "失憶魔術師", desc: "在群組累計收回訊息達 200 次以上，神龍見首不見尾！" },
+            { min: 100, name: "放羊的孩子", desc: "在群組累計收回訊息達 100 次以上，手速極快的收回大師！" },
+            { min: 50,  name: "說話不算話", desc: "在群組累計收回訊息達 50 次以上，話說出口又悄悄帶走～" },
+            { min: 20,  name: "剛剛有說話？", desc: "在群組累計收回訊息達 20 次以上，幽默手滑日常！" },
+            { min: 5,   name: "是口誤嗎？", desc: "在群組累計收回訊息達 5 次以上，小心翼翼的發言家！" }
+        ],
+        photoTiers: [
+            { min: 200, name: "攝影狂人", desc: "在群組累計分享照片/影片達 200 張以上，精彩生活捕捉大師！" },
+            { min: 50,  name: "快門手", desc: "在群組累計分享照片/影片達 50 張以上，熱愛分享生活點滴！" }
+        ],
+        founderTitle: "2022開國元老",
+        founderYear: "2022",
+        founderDesc: "2022 年創群初期即加入社群，一路相伴至今的資深開創元老！",
+        birthdayTitle: "本月壽星",
+        birthdayDesc: "當月份生日的壽星成員，享有全體群友溫暖祝福！",
+        rankChampionDesc: "榮獲群組月度或年度長舌榜第 1 名冠軍，無人能及的話題之王！（結算永久紀錄）",
+        rankRunnerUpDesc: "榮獲群組月度或年度長舌榜第 2 名亞軍，社群熱烈討論的核心推手！（結算永久紀錄）",
+        rankThirdPlaceDesc: "榮獲群組月度或年度長舌榜第 3 名季軍，活躍不打烊的發言好手！（結算永久紀錄）",
+        rankGeneralDesc: "榮獲社群發言長舌榜榮譽成就！（結算永久紀錄）",
+        customBadges: {}
+    };
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // 1. 初始化身分認證 (多重架構：後端注入 + Context + ID Token + Profile + 本地持久化)
+        initLiffAuth();
+
+        // 2. 獲取 URL 或 state 參數中的 seqId 並向後端拉取資料
+        currentSeqId = window.SERVER_SEQ_ID || extractQueryParam('seqId') || extractQueryParam('id') || '1';
+        loadGroupContent(currentSeqId);
+
+        // 3. 綁定個人名片滾動時自動關閉 Tooltip
+        const modalBody = document.querySelector('.profile-card-modal .modal-body');
+        if (modalBody) {
+            modalBody.addEventListener('scroll', hideBadgeTooltip);
+        }
+    });
+
+    /**
+     * 從 URL 查詢參數、liff.state 或 hash 中提取參數
+     */
+    function extractQueryParam(param) {
+        const urlParams = new URLSearchParams(window.location.search);
+        let val = urlParams.get(param);
+        if (val) return val;
+
+        let stateStr = urlParams.get('liff.state');
+        if (stateStr) {
+            try {
+                let decoded = decodeURIComponent(stateStr);
+                let m = decoded.match(new RegExp('[?&]' + param + '=([^&#]+)'));
+                if (m) return m[1];
+            } catch(e) {}
+        }
+
+        if (window.location.hash) {
+            try {
+                let hashStr = window.location.hash.substring(1);
+                let idx = hashStr.indexOf('?');
+                if (idx !== -1) {
+                    let hParams = new URLSearchParams(hashStr.substring(idx));
+                    let hVal = hParams.get(param);
+                    if (hVal) return hVal;
+                }
+            } catch(e) {}
+        }
+
+        return null;
+    }
+
+    /**
+     * LIFF 身分驗證 (由 LINE 官方 SDK 自動嚴格驗證，禁止手動自選或竄改)
+     */
+    function initLiffAuth() {
+        const liffId = extractQueryParam('liffId') || DEFAULT_LIFF_ID;
+
+        // 1. 檢查後端 GAS doGet(e) 伺服器端注入之 User ID
+        if (window.SERVER_USER_ID) {
+            handleLoginSuccess(window.SERVER_USER_ID, '已驗證成員');
+        }
+
+        // 2. 檢查 URL 參數
+        const paramUserId = extractQueryParam('userId') || extractQueryParam('uid');
+        if (paramUserId && !currentUserId) {
+            handleLoginSuccess(paramUserId, 'LINE 使用者');
+        }
+
+        // 3. 檢查 localStorage 持久化記錄 (作為快速載入快取)
+        try {
+            const cachedUid = localStorage.getItem('ls_member_uid');
+            const cachedName = localStorage.getItem('ls_member_name');
+            if (cachedUid && !currentUserId) {
+                handleLoginSuccess(cachedUid, cachedName || '社群成員');
+            }
+        } catch (e) {}
+
+        // 4. 若在 Google Apps Script iframe 環境中，嘗試透過 getLocation 取得參數
+        if (window.google && google.script && google.script.url) {
+            google.script.url.getLocation(function(loc) {
+                if (loc && loc.parameter) {
+                    const pUid = loc.parameter.userId || loc.parameter.uid;
+                    if (pUid && !currentUserId) {
+                        handleLoginSuccess(pUid, 'LINE 使用者');
+                    }
+                    const pSeq = loc.parameter.seqId;
+                    if (pSeq && (!currentSeqId || currentSeqId === '1')) {
+                        currentSeqId = pSeq;
+                        loadGroupContent(currentSeqId);
+                    }
+                }
+            });
+        }
+
+        // 5. 初始化 LINE LIFF SDK (正式官方認證，防竄改)
+        if (window.liff) {
+            liff.init({ liffId: liffId }).then(() => {
+                // 優先檢查 Context (在 LINE 聊天室開啟時無需額外登入授權即可直接取得)
+                try {
+                    const context = liff.getContext();
+                    if (context && context.userId && !currentUserId) {
+                        handleLoginSuccess(context.userId, 'LINE 成員');
+                    }
+                } catch (e) {}
+
+                // 檢查 Decoded ID Token
+                try {
+                    const idToken = liff.getDecodedIDToken();
+                    if (idToken && idToken.sub && !currentUserId) {
+                        handleLoginSuccess(idToken.sub, idToken.name || 'LINE 使用者');
+                    }
+                } catch (e) {}
+
+                // 檢查 Profile
+                if (liff.isLoggedIn()) {
+                    liff.getProfile().then(profile => {
+                        handleLoginSuccess(profile.userId, profile.displayName);
+                    }).catch(err => {
+                        console.warn("LIFF getProfile 失敗:", err);
+                    });
+                } else if (!liff.isInClient()) {
+                    if (!currentUserId) updateAuthUI(false);
+                }
+            }).catch(err => {
+                console.log("LIFF 初始化或訪客環境:", err);
+                if (!currentUserId) updateAuthUI(false);
+            });
+        } else {
+            if (!currentUserId) updateAuthUI(false);
+        }
+    }
+
+    function handleLoginSuccess(userId, displayName) {
+        if (!userId) return;
+        currentUserId = String(userId).trim();
+        currentDisplayName = displayName || currentDisplayName || '已登入成員';
+
+        try {
+            localStorage.setItem('ls_member_uid', currentUserId);
+            if (displayName) localStorage.setItem('ls_member_name', displayName);
+        } catch (e) {}
+
+        updateAuthUI(true, currentDisplayName);
+        if (currentGroupData) {
+            renderMemberList();
+            refreshUserActionArea();
+        }
+    }
+
+    function updateAuthUI(isLoggedIn, displayName) {
+        const authBadge = document.getElementById('authBadge');
+        const guestNotice = document.getElementById('guestNotice');
+        const memberArea = document.getElementById('memberActionArea');
+
+        if (isLoggedIn && currentUserId) {
+            authBadge.className = 'auth-status-badge badge-verified';
+            authBadge.textContent = '👤 ' + (displayName || '已登入成員');
+            authBadge.title = '點擊開啟個人數位名片';
+            guestNotice.style.display = 'none';
+            memberArea.style.display = 'block';
+        } else {
+            authBadge.className = 'auth-status-badge badge-guest';
+            authBadge.textContent = '🔑 訪客模式 (點此登入)';
+            authBadge.title = '點擊登入 LINE 以確認身分';
+            guestNotice.style.display = 'flex';
+            memberArea.style.display = 'none';
+        }
+    }
+
+    function handleAuthClick() {
+        if (currentUserId) {
+            // 已由 LINE 官方驗證身分：點擊開啟本人名片 (不顯示 UID，禁止手動切換)
+            openMemberProfile(currentUserId);
+        } else {
+            // 未登入：透過官方 LINE LIFF 進行授權登入
+            redirectToLiffAuth();
+        }
+    }
+
+    function redirectToLiffAuth() {
+        if (window.liff) {
+            // 在頂層視窗 (GitHub Pages) 下直接跳轉官方 LINE Login，絕不觸發 ERR_BLOCKED_BY_RESPONSE
+            liff.login();
+            return;
+        }
+        const liffUrl = 'https://liff.line.me/' + DEFAULT_LIFF_ID + (currentSeqId ? ('?seqId=' + encodeURIComponent(currentSeqId)) : '');
+        window.location.href = liffUrl;
+    }
+
+    /**
+     * 前後端雙模 API 調用調度器 (支援 GAS 原生環境與 GitHub Pages 頂層網域)
+     */
+    function callGasApi(action, params, onSuccess, onFailure) {
+        params = params || {};
+        params.action = action;
+
+        // 1. 若在 GAS 環境中且有 google.script.run
+        if (window.google && google.script && google.script.run) {
+            if (action === 'getGroup' || action === 'getContent') {
+                google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFailure).getContentFromSeqId(params.seqId);
+                return;
+            } else if (action === 'joinGroup') {
+                google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFailure).apiJoinGroup(params.seqId, params.userId, params.noteText);
+                return;
+            } else if (action === 'leaveGroup') {
+                google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFailure).apiLeaveGroup(params.seqId, params.userId);
+                return;
+            } else if (action === 'updateNote') {
+                google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFailure).apiUpdateGroupNote(params.seqId, params.userId, params.noteText);
+                return;
+            } else if (action === 'getMemberProfile' || action === 'getProfile') {
+                google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFailure).apiGetMemberProfile(params.userId);
+                return;
+            } else if (action === 'resolveLocation') {
+                google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFailure).resolveLocationCoordinates(params.url, params.name, params.address);
+                return;
+            }
+        }
+
+        // 2. 前端部署於 GitHub Pages 等靜態託管時，透過 fetch 呼叫 GAS 後端 API
+        if (!GAS_API_URL || GAS_API_URL.includes("YOUR_GAS_DEPLOYMENT_ID")) {
+            console.warn("GAS_API_URL 尚未設定");
+            if (onFailure) onFailure("GAS_API_URL 尚未設定，請在 group/index.html 中配置您的 GAS Web App 部署網址！");
+            return;
+        }
+
+        // 先以 text/plain POST 發送避免觸發 OPTIONS CORS preflight
+        fetch(GAS_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(params)
+        })
+        .then(r => r.json())
+        .then(onSuccess)
+        .catch(postErr => {
+            console.warn("POST 請求受限，嘗試以 GET 模式重試:", postErr);
+            const query = new URLSearchParams(params).toString();
+            fetch(GAS_API_URL + '?' + query)
+                .then(r => r.json())
+                .then(onSuccess)
+                .catch(err => {
+                    if (onFailure) onFailure(err);
+                });
+        });
+    }
+
+    /**
+     * 從後端獲取揪團資料
+     */
+    function loadGroupContent(seqId) {
+        callGasApi('getGroup', { seqId: seqId }, function(response) {
+            renderData(response);
+        }, function(err) {
+            showError('載入揪團資料失敗：' + err);
+        });
+    }
+
+    function renderData(response) {
+        const loadingEl = document.getElementById('loading');
+        const containerEl = document.getElementById('mainContainer');
+
+        if (!response || response.success === false) {
+            showError((response && response.error) || '找不到該揪團資訊或已過期');
+            return;
+        }
+
+        currentGroupData = response;
+
+        // 標題與內文
+        document.getElementById("title").textContent = response.title || '揪團活動';
+        document.getElementById("date").textContent = response.date || '';
+        document.getElementById("content").innerHTML = replaceLinks(response.content || '');
+
+        // 地點與地圖
+        let locName = response.locationName || '';
+        let locUrl = response.locationUrl || '';
+        let locAddress = response.locationAddress || '';
+
+        if (locName || locAddress || locUrl) {
+            const displayTitle = locName || locAddress || '活動地點';
+            document.getElementById("locationName").textContent = displayTitle;
+            const addrEl = document.getElementById("locationAddress");
+            if (addrEl) {
+                if (locAddress && locAddress !== displayTitle) {
+                    addrEl.textContent = locAddress;
+                    addrEl.style.display = "block";
+                } else {
+                    addrEl.textContent = "";
+                    addrEl.style.display = "none";
+                }
+            }
+
+            targetMapUrl = response.locationResolvedUrl || locUrl || ('https://maps.google.com/?q=' + encodeURIComponent(locAddress || displayTitle));
+            document.getElementById("locationMapLink").href = targetMapUrl;
+            document.getElementById("locationCard").style.display = "block";
+
+            if (response.locationLat && response.locationLng) {
+                renderMapPreview(response.locationLat, response.locationLng);
+            } else {
+                initLocationMap(locName, locUrl, locAddress);
+            }
+        }
+
+        // 人數上限
+        document.getElementById("countDisplay").textContent =
+            `${response.currentCount || 0} / ${response.maxLimit || '不限'}`;
+
+        // 雙日曆加入按鈕
+        const gcalBtn = document.getElementById("googleCalButton");
+        if (response.googleCalendarUrl) {
+            gcalBtn.href = response.googleCalendarUrl;
+            gcalBtn.classList.remove('disabled');
+        } else {
+            gcalBtn.classList.add('disabled');
+        }
+
+        const icalBtn = document.getElementById("eventButton");
+        if (response.eventUrl) {
+            icalBtn.href = response.eventUrl;
+            icalBtn.classList.remove('disabled');
+        } else {
+            icalBtn.classList.add('disabled');
+        }
+
+        // 參加者名單與備註
+        globalJoinedList = response.joinedList || [];
+        globalJoinedNotesHistory = response.joinedNotesHistory || [];
+        globalJoinedNotes = response.joinedNotes || {};
+
+        renderMemberList();
+
+        // 重新判定使用者報名狀態與操作按鈕
+        refreshUserActionArea();
+
+        // 隱藏 Loading
+        loadingEl.style.opacity = '0';
+        setTimeout(() => {
+            loadingEl.style.display = 'none';
+            containerEl.classList.add('show');
+        }, 400);
+    }
+
+    /**
+     * 渲染參加者網格列表
+     */
+    function renderMemberList() {
+        const memberContainer = document.getElementById("joinedList");
+        let memberHtml = '';
+
+        if (globalJoinedList && globalJoinedList.length > 0) {
+            globalJoinedList.forEach((member, index) => {
+                const delay = index * 0.04;
+                const safeName = escapeHtml(member.name || '');
+                const safeNote = escapeHtml(member.note || '');
+                const safePic = escapeHtml(member.pic || 'https://imgur.com/786FxAA.jpg');
+                const isMe = (currentUserId && String(member.id).toLowerCase() === currentUserId.toLowerCase());
+
+                const noteHtml = (safeNote.trim() !== '')
+                    ? `<div class="member-note" onclick="openNoteHistoryModalByIndex(${index})">
+                        <span class="member-note-btn">備註歷史</span>
+                        <span class="member-note-text">${safeNote}</span>
+                      </div>`
+                    : '';
+
+                memberHtml += `
+                    <div class="member-item" style="animation-delay: ${delay}s">
+                        <div class="avatar-container" onclick="openMemberProfile('${member.id}')" title="點擊查看數位名片">
+                            <img class="member-avatar" src="${safePic}" loading="lazy" />
+                            ${isMe ? '<span class="my-self-badge">我</span>' : ''}
+                        </div>
+                        <span class="member-name">${safeName}</span>
+                        ${noteHtml}
+                    </div>
+                `;
+            });
+        } else {
+            memberHtml = '<div style="grid-column: 1/-1; text-align: center; color: #999; padding: 20px 0;">尚無人報名</div>';
+        }
+
+        memberContainer.innerHTML = memberHtml;
+    }
+
+    /**
+     * 刷新當前登入使用者的直接操作按鈕區 (報名/改備註/退出)
+     */
+    function refreshUserActionArea() {
+        if (!currentUserId) {
+            updateAuthUI(false);
+            return;
+        }
+
+        updateAuthUI(true, currentDisplayName);
+
+        const btnRow = document.getElementById('actionBtnRow');
+        const noteInput = document.getElementById('userActionNote');
+
+        const existingMember = globalJoinedList.find(m => String(m.id).toLowerCase() === currentUserId.toLowerCase());
+        const isJoined = !!existingMember;
+
+        const maxLimit = parseInt(currentGroupData.maxLimit, 10) || 99;
+        const currentCount = globalJoinedList.length;
+        const isFull = (maxLimit !== 99 && currentCount >= maxLimit);
+
+        if (isJoined) {
+            // 已報名狀態：填入現有備註
+            noteInput.value = existingMember.note || '';
+            btnRow.innerHTML = `
+                <button type="button" class="btn-act btn-update-note" onclick="handleUpdateNote()">
+                    ✏️ 更新備註
+                </button>
+                <button type="button" class="btn-act btn-leave" onclick="handleLeaveGroup()">
+                    🚪 退出揪團
+                </button>
+            `;
+        } else {
+            // 未報名狀態
+            if (isFull) {
+                btnRow.innerHTML = `
+                    <button type="button" class="btn-act btn-full" disabled>
+                        ❌ 人數已額滿 (${currentCount}/${maxLimit})
+                    </button>
+                `;
+            } else {
+                btnRow.innerHTML = `
+                    <button type="button" class="btn-act btn-join" onclick="handleJoinGroup()">
+                        🙋‍♂️ 立即報名
+                    </button>
+                `;
+            }
+        }
+    }
+
+    /**
+     * 直接報名
+     */
+    function handleJoinGroup() {
+        if (!currentUserId || !currentSeqId) {
+            Swal.fire('提示', '請先確認 LINE 身分驗證以完成報名', 'info');
+            return;
+        }
+
+        const noteText = document.getElementById('userActionNote').value.trim();
+
+        Swal.fire({
+            title: '確認報名',
+            text: noteText ? `備註：${noteText}` : '確定要參加這個揪團活動嗎？',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#4a8c72',
+            cancelButtonColor: '#94a3b8',
+            confirmButtonText: '確定參加',
+            cancelButtonText: '取消'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                Swal.fire({
+                    title: '報名處理中...',
+                    allowOutsideClick: false,
+                    didOpen: () => Swal.showLoading()
+                });
+
+                callGasApi('joinGroup', { seqId: currentSeqId, userId: currentUserId, noteText: noteText }, function(res) {
+                    if (res && res.success) {
+                        Swal.fire('報名成功！', '您已成功加入本活動名單 🎉', 'success');
+                        loadGroupContent(currentSeqId);
+                    } else {
+                        Swal.fire('報名失敗', (res && res.error) || '發生未知錯誤', 'error');
+                    }
+                }, function(err) {
+                    Swal.fire('系統錯誤', '報名失敗：' + err, 'error');
+                });
+            }
+        });
+    }
+
+    /**
+     * 更新備註
+     */
+    function handleUpdateNote() {
+        if (!currentUserId || !currentSeqId) return;
+        const noteText = document.getElementById('userActionNote').value.trim();
+
+        Swal.fire({
+            title: '更新備註中...',
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading()
+        });
+
+        callGasApi('updateNote', { seqId: currentSeqId, userId: currentUserId, noteText: noteText }, function(res) {
+            if (res && res.success) {
+                Swal.fire('更新成功！', '您的備註已成功儲存', 'success');
+                let member = globalJoinedList.find(m => String(m.id).toLowerCase() === currentUserId.toLowerCase());
+                if (member) member.note = noteText;
+                renderMemberList();
+            } else {
+                Swal.fire('更新失敗', (res && res.error) || '發生未知錯誤', 'error');
+            }
+        }, function(err) {
+            Swal.fire('系統錯誤', '更新備註失敗：' + err, 'error');
+        });
+    }
+
+    /**
+     * 退出揪團
+     */
+    function handleLeaveGroup() {
+        if (!currentUserId || !currentSeqId) return;
+
+        Swal.fire({
+            title: '確定要退出揪團嗎？',
+            text: '退出後您的名額將釋出給其他夥伴',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#e53e3e',
+            cancelButtonColor: '#94a3b8',
+            confirmButtonText: '確認退出',
+            cancelButtonText: '取消'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                Swal.fire({
+                    title: '退出處理中...',
+                    allowOutsideClick: false,
+                    didOpen: () => Swal.showLoading()
+                });
+
+                callGasApi('leaveGroup', { seqId: currentSeqId, userId: currentUserId }, function(res) {
+                    if (res && res.success) {
+                        Swal.fire('已退出', '您已退出本揪團活動', 'info');
+                        loadGroupContent(currentSeqId);
+                    } else {
+                        Swal.fire('退出失敗', (res && res.error) || '發生未知錯誤', 'error');
+                    }
+                }, function(err) {
+                    Swal.fire('系統錯誤', '退出失敗：' + err, 'error');
+                });
+            }
+        });
+    }
+
+    /**
+     * 點擊參加者頭像開啟個人數位名片
+     */
+    function openMemberProfile(userId) {
+        if (!userId) return;
+
+        Swal.fire({
+            title: '載入數位名片中...',
+            allowOutsideClick: false,
+            didOpen: () => Swal.showLoading()
+        });
+
+        callGasApi('getMemberProfile', { userId: userId }, function(res) {
+            Swal.close();
+            if (res && res.success && res.profile) {
+                if (res.titleConfig) serverTitleConfig = res.titleConfig;
+                displayProfileModal(res.profile);
+            } else {
+                Swal.fire('提示', (res && res.error) || '無法載入該成員資料', 'info');
+            }
+        }, function(err) {
+            Swal.close();
+            Swal.fire('錯誤', '載入名片失敗：' + err, 'error');
+        });
+    }
+
+    function displayProfileModal(p) {
+        hideBadgeTooltip();
+        document.getElementById('cardAvatar').src = p.pic || 'https://imgur.com/786FxAA.jpg';
+        document.getElementById('cardName').textContent = p.name || '神秘群友';
+        document.getElementById('cardJoinDays').textContent = `已加入 L>S 社群 ${p.joinDays || 1} 天`;
+
+        document.getElementById('cardZodiac').textContent = p.zodiac || '秘密 🤫';
+        document.getElementById('cardRelationship').textContent = p.relationship || '未填寫';
+        document.getElementById('cardResidence').textContent = p.residence || '未填寫';
+        document.getElementById('cardOccupation').textContent = p.occupation || '未填寫';
+
+        const joinDateEl = document.getElementById('cardJoinDate');
+        if (joinDateEl) {
+            joinDateEl.textContent = p.joinDate ? `${p.joinDate} (${p.joinDays || 1}天)` : `已加入 ${p.joinDays || 1} 天`;
+        }
+
+        // 稱號徽章牆 (支援點擊查看 Tooltip 來源)
+        let badgeHtml = '';
+        if (p.badges && p.badges.length > 0) {
+            p.badges.forEach(b => {
+                let badgeClass = 'badge-pill';
+                if (b.includes('冠軍') || b.includes('神')) badgeClass += ' champion';
+                else if (b.includes('達人') || b.includes('元老')) badgeClass += ' gold';
+                const info = getBadgeInfo(b);
+                const safeBadge = escapeHtml(b);
+                const safeDesc = escapeHtml(info.desc);
+                badgeHtml += `<span class="${badgeClass}" onclick="showBadgeTooltip(event, '${safeBadge}')" title="點擊查看說明：${safeDesc}">${safeBadge}</span>`;
+            });
+        } else {
+            badgeHtml = '<span style="color:#9ca3af;font-size:0.8rem;">尚無特殊稱號勳章</span>';
+        }
+        document.getElementById('cardBadges').innerHTML = badgeHtml;
+
+        // 自介
+        document.getElementById('cardBio').textContent = p.bio || '這位朋友很神秘，還沒有留下自我介紹唷～';
+
+        // 8 宮格活動與活躍統計
+        document.getElementById('statHost').textContent = p.hostCount || 0;
+        document.getElementById('statJoin').textContent = p.joinCount || 0;
+        document.getElementById('statMsg').textContent = p.textCount || 0;
+        const stickerEl = document.getElementById('statSticker');
+        if (stickerEl) stickerEl.textContent = p.stickerCount || 0;
+        document.getElementById('statUnsend').textContent = p.unsendCount || 0;
+        const dailyEl = document.getElementById('statDailyMsg');
+        if (dailyEl) dailyEl.textContent = p.dailyMsg || 0;
+        const monthEl = document.getElementById('statMonthMsg');
+        if (monthEl) monthEl.textContent = p.monthMsg || 0;
+        const yearEl = document.getElementById('statYearMsg');
+        if (yearEl) yearEl.textContent = p.yearMsg || 0;
+
+        document.getElementById('profileModalOverlay').classList.add('active');
+    }
+
+    function closeProfileModal() {
+        hideBadgeTooltip();
+        document.getElementById('profileModalOverlay').classList.remove('active');
+    }
+
+    function handleCardClick(event) {
+        event.stopPropagation();
+        if (!event.target.closest('.badge-pill')) {
+            hideBadgeTooltip();
+        }
+    }
+
+    /**
+     * 稱號說明查詢 (優先讀取後端 titleConfig，Fallback 使用 DEFAULT_TITLE_CONFIG)
+     */
+    function getBadgeInfo(badgeName) {
+        if (!badgeName) return { title: '', desc: '社群成員成就稱號' };
+        let bName = String(badgeName).replace(/^[👑🎒🙈🏛️🏆🥈🥉📸✨🎖️\s]+/, '').trim();
+        const cfg = serverTitleConfig || DEFAULT_TITLE_CONFIG;
+
+        if (cfg.customBadges && cfg.customBadges[bName]) {
+            return { title: bName, desc: cfg.customBadges[bName] };
+        }
+        if (cfg.hostTiers) {
+            let found = cfg.hostTiers.find(t => t.name === bName);
+            if (found) return { title: found.name, desc: found.desc || `舉辦揪團累計達 ${found.min} 次以上` };
+        }
+        if (cfg.joinTiers) {
+            let found = cfg.joinTiers.find(t => t.name === bName);
+            if (found) return { title: found.name, desc: found.desc || `參加揪團累計達 ${found.min} 次以上` };
+        }
+        if (cfg.unsendTiers) {
+            let found = cfg.unsendTiers.find(t => t.name === bName);
+            if (found) return { title: found.name, desc: found.desc || `收回訊息累計達 ${found.min} 次以上` };
+        }
+        if (cfg.photoTiers) {
+            let found = cfg.photoTiers.find(t => t.name === bName);
+            if (found) return { title: found.name, desc: found.desc || `傳送圖片/影片累計達 ${found.min} 張以上` };
+        }
+        if (bName.includes(cfg.founderTitle || "開國元老")) {
+            return { title: cfg.founderTitle || "開國元老", desc: cfg.founderDesc || "2022 年創群初期即加入社群之資深元老！" };
+        }
+        if (bName.includes("壽星")) {
+            return { title: "本月壽星", desc: cfg.birthdayDesc || "當月份生日的壽星成員！" };
+        }
+        if (bName.includes("冠軍")) {
+            return { title: bName, desc: cfg.rankChampionDesc || "榮獲長舌榜第 1 名冠軍！（結算永久紀錄）" };
+        }
+        if (bName.includes("亞軍")) {
+            return { title: bName, desc: cfg.rankRunnerUpDesc || "榮獲長舌榜第 2 名亞軍！（結算永久紀錄）" };
+        }
+        if (bName.includes("季軍")) {
+            return { title: bName, desc: cfg.rankThirdPlaceDesc || "榮獲長舌榜第 3 名季軍！（結算永久紀錄）" };
+        }
+        return { title: bName, desc: cfg.rankGeneralDesc || `獲得「${bName}」榮譽成就稱號！` };
+    }
+
+    /**
+     * 顯示稱號來源 Tooltip
+     */
+    function showBadgeTooltip(event, badgeName) {
+        event.stopPropagation();
+        const tooltip = document.getElementById('badgeTooltip');
+        const modal = document.querySelector('.profile-card-modal');
+        if (!tooltip || !modal) return;
+
+        if (tooltip.classList.contains('active') && tooltip.dataset.activeBadge === badgeName) {
+            hideBadgeTooltip();
+            return;
+        }
+
+        const badgeEl = event.currentTarget;
+        const info = getBadgeInfo(badgeName);
+
+        document.getElementById('badgeTooltipTitle').textContent = info.title;
+        document.getElementById('badgeTooltipDesc').textContent = '💡 來源：' + info.desc;
+        tooltip.dataset.activeBadge = badgeName;
+
+        tooltip.style.display = 'block';
+        tooltip.style.visibility = 'hidden';
+
+        const modalRect = modal.getBoundingClientRect();
+        const badgeRect = badgeEl.getBoundingClientRect();
+        const tooltipWidth = tooltip.offsetWidth || 240;
+        const tooltipHeight = tooltip.offsetHeight || 60;
+
+        let left = (badgeRect.left + badgeRect.width / 2) - modalRect.left - (tooltipWidth / 2);
+        let top = (badgeRect.top - modalRect.top) - tooltipHeight - 10;
+        let isAbove = true;
+
+        if (top < 70) {
+            top = (badgeRect.bottom - modalRect.top) + 10;
+            isAbove = false;
+        }
+
+        const minLeft = 14;
+        const maxLeft = modalRect.width - tooltipWidth - 14;
+        if (left < minLeft) left = minLeft;
+        if (left > maxLeft) left = maxLeft;
+
+        const badgeCenterInModal = (badgeRect.left + badgeRect.width / 2) - modalRect.left;
+        const arrowOffset = Math.max(12, Math.min(tooltipWidth - 12, badgeCenterInModal - left));
+
+        tooltip.style.setProperty('--arrow-left', arrowOffset + 'px');
+        if (isAbove) {
+            tooltip.classList.remove('arrow-up');
+            tooltip.classList.add('arrow-down');
+        } else {
+            tooltip.classList.remove('arrow-down');
+            tooltip.classList.add('arrow-up');
+        }
+
+        tooltip.style.left = left + 'px';
+        tooltip.style.top = top + 'px';
+        tooltip.style.visibility = 'visible';
+
+        requestAnimationFrame(() => {
+            tooltip.classList.add('active');
+        });
+    }
+
+    /**
+     * 隱藏稱號來源 Tooltip
+     */
+    function hideBadgeTooltip() {
+        const tooltip = document.getElementById('badgeTooltip');
+        if (!tooltip) return;
+        tooltip.classList.remove('active');
+        tooltip.dataset.activeBadge = '';
+        setTimeout(() => {
+            if (!tooltip.classList.contains('active')) {
+                tooltip.style.display = 'none';
+            }
+        }, 150);
+    }
+
+    /**
+     * Leaflet 地圖與短網址反查
+     */
+    function initLocationMap(name, url, address) {
+        if (!window.L) return;
+
+        let coordMatch = (url || '').match(/@(-?\d+\.\d+),(-?\d+\.\d+)/) ||
+            (url || '').match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/) ||
+            (url || '').match(/[?&](?:query|q|ll)=(-?\d+\.\d+),(-?\d+\.\d+)/) ||
+            (url || '').match(/center=(-?\d+\.\d+)(?:%2C|,)(-?\d+\.\d+)/);
+
+        if (coordMatch) {
+            let lat = parseFloat(coordMatch[1]);
+            let lng = parseFloat(coordMatch[2]);
+            renderMapPreview(lat, lng);
+            return;
+        }
+
+        if (url || address || name) {
+            callGasApi('resolveLocation', { url: url, name: name, address: address }, function(coords) {
+                if (coords && coords.lat && coords.lng) {
+                    if (coords.resolvedUrl) {
+                        targetMapUrl = coords.resolvedUrl;
+                        const linkEl = document.getElementById("locationMapLink");
+                        if (linkEl) linkEl.href = targetMapUrl;
+                    }
+                    renderMapPreview(coords.lat, coords.lng);
+                } else {
+                    fallbackGeocode(name, address);
+                }
+            }, function() {
+                fallbackGeocode(name, address);
+            });
+        } else {
+            fallbackGeocode(name, address);
+        }
+    }
+
+    function fallbackGeocode(name, address) {
+        let cleanName = name ? name.replace(/（[^）]*）|\([^)]*\)|\[[^\]]*\]/g, '').trim() : '';
+        let queries = [address, cleanName, name]
+            .map(q => q ? String(q).trim() : '')
+            .filter((q, idx, arr) => q && arr.indexOf(q) === idx);
+
+        if (queries.length === 0) {
+            renderMapPreview(25.0330, 121.5654);
+            return;
+        }
+
+        const tryQuery = (idx) => {
+            if (idx >= queries.length) {
+                renderMapPreview(25.0330, 121.5654);
+                return;
+            }
+            fetch('https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(queries[idx]) + '&countrycodes=tw&format=json&limit=1')
+                .then(r => r.json())
+                .then(list => {
+                    if (Array.isArray(list) && list.length > 0) {
+                        renderMapPreview(parseFloat(list[0].lat), parseFloat(list[0].lon));
+                    } else {
+                        tryQuery(idx + 1);
+                    }
+                })
+                .catch(() => tryQuery(idx + 1));
+        };
+        tryQuery(0);
+    }
+
+    function renderMapPreview(lat, lng) {
+        try {
+            const mapEl = document.getElementById('mapView');
+            if (!mapEl) return;
+
+            if (leafletMap) {
+                leafletMap.remove();
+                leafletMap = null;
+            }
+
+            leafletMap = L.map('mapView', {
+                center: [lat, lng],
+                zoom: 16,
+                zoomControl: false,
+                attributionControl: false,
+                dragging: false,
+                touchZoom: false,
+                scrollWheelZoom: false,
+                doubleClickZoom: false,
+                boxZoom: false,
+                keyboard: false
+            });
+
+            L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19
+            }).addTo(leafletMap);
+
+            const redPin = L.divIcon({
+                className: 'custom-map-marker',
+                html: '<div style="font-size: 28px; line-height: 1; transform: translate(-50%, -100%); filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35));">📍</div>',
+                iconSize: [0, 0]
+            });
+            L.marker([lat, lng], { icon: redPin }).addTo(leafletMap);
+
+            setTimeout(() => {
+                if (leafletMap) leafletMap.invalidateSize();
+            }, 300);
+        } catch(e) {
+            console.error('Render map preview error:', e);
+        }
+    }
+
+    function openNoteHistoryModalByIndex(idx) {
+        if (!globalJoinedList || !globalJoinedList[idx]) return;
+        const member = globalJoinedList[idx];
+        openNoteHistoryModal(member.id, member.name);
+    }
+
+    function showError(msg) {
+        const loadingEl = document.getElementById('loading');
+        loadingEl.innerHTML = `<div class="error-msg">${msg}</div>`;
+    }
+
+    function openLocationMap() {
+        if (targetMapUrl) {
+            window.open(targetMapUrl, '_blank');
+        }
+    }
+
+    function replaceLinks(text) {
+        if (!text) return '';
+        const regex = /(https?:\/\/[^\s"<]+)/g;
+        return text.replace(regex, '<a href="$1" target="_blank">$1</a>');
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        return String(text)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    function showImgLightbox(imageUrl) {
+        const lightbox = document.getElementById('img-lightbox');
+        const img = document.getElementById('lightbox-image');
+        img.src = imageUrl;
+        lightbox.classList.add('active');
+    }
+
+    function closeImgLightbox() {
+        document.getElementById('img-lightbox').classList.remove('active');
+    }
+
+    function openNoteHistoryModal(userId, userName) {
+        const titleEl = document.getElementById('noteHistoryTitle');
+        const listEl = document.getElementById('noteHistoryList');
+
+        titleEl.textContent = `${userName} 的備註歷史`;
+
+        let userHistory = [];
+        if (Array.isArray(globalJoinedNotesHistory)) {
+            userHistory = globalJoinedNotesHistory.filter(item => item && (item.userId == userId || item.userId === userId));
+        }
+
+        let displayList = [...userHistory].reverse();
+
+        let html = '';
+        if (displayList.length > 0) {
+            displayList.forEach((item, idx) => {
+                const isLatest = idx === 0;
+                html += `
+                    <div class="history-item ${isLatest ? 'latest' : ''}">
+                        <div class="history-note">${escapeHtml(item.note || '無內容')}</div>
+                        <div class="history-time">
+                            <span>${escapeHtml(item.time || '')}</span>
+                            ${isLatest ? '<span class="latest-badge">最新</span>' : ''}
+                        </div>
+                    </div>
+                `;
+            });
+        } else {
+            const currentInfo = globalJoinedNotes && globalJoinedNotes[userId];
+            if (currentInfo && currentInfo.note) {
+                html = `
+                    <div class="history-item latest">
+                        <div class="history-note">${escapeHtml(currentInfo.note)}</div>
+                        <div class="history-time">
+                            <span>${escapeHtml(currentInfo.time || '')}</span>
+                            <span class="latest-badge">最新</span>
+                        </div>
+                    </div>
+                `;
+            } else {
+                html = '<div style="text-align: center; color: #999; padding: 20px 0;">尚無備註修訂紀錄</div>';
+            }
+        }
+
+        listEl.innerHTML = html;
+        document.getElementById('note-history-lightbox').classList.add('active');
+    }
+
+    function closeNoteHistoryModal() {
+        document.getElementById('note-history-lightbox').classList.remove('active');
+    }
+
+    function openTagModal() {
+        if (!globalJoinedList || globalJoinedList.length === 0) {
+            alert("目前沒有參加者可標記");
+            return;
+        }
+
+        const tagString = globalJoinedList
+            .map(member => `@${member.name}`)
+            .join(' ');
+
+        const textarea = document.getElementById('tagTextarea');
+        textarea.value = tagString;
+
+        document.getElementById('btnCopy').textContent = "複製";
+        document.getElementById('btnCopy').style.backgroundColor = "var(--primary-color)";
+
+        document.getElementById('tag-lightbox').classList.add('active');
+    }
+
+    function closeTagModal() {
+        document.getElementById('tag-lightbox').classList.remove('active');
+    }
+
+    function copyTagText() {
+        const textarea = document.getElementById('tagTextarea');
+        textarea.select();
+        textarea.setSelectionRange(0, 99999);
+
+        try {
+            navigator.clipboard.writeText(textarea.value).then(() => {
+                showCopySuccess();
+            }).catch(() => {
+                document.execCommand('copy');
+                showCopySuccess();
+            });
+        } catch (err) {
+            alert('複製失敗，請手動複製');
+        }
+    }
+
+    function showCopySuccess() {
+        const btn = document.getElementById('btnCopy');
+        btn.textContent = "已複製！";
+        btn.style.backgroundColor = "#28a745";
+        setTimeout(() => {
+            closeTagModal();
+        }, 1200);
+    }
+</script>
+
+</body>
+</html>
