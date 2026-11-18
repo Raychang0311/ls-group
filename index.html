@@ -444,6 +444,85 @@
             cursor: not-allowed;
         }
 
+        .btn-edit-group {
+            background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+            color: white !important;
+            box-shadow: 0 4px 12px rgba(180, 83, 9, 0.35);
+        }
+
+        .btn-edit-group:hover {
+            filter: brightness(1.05);
+        }
+
+        /* 主揪專屬快捷控制區塊 */
+        .host-control-box {
+            background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+            border: 1.5px solid #fde68a;
+            border-radius: 12px;
+            padding: 12px 14px;
+            margin-bottom: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 2px 6px rgba(217, 119, 6, 0.08);
+        }
+
+        .host-control-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .host-control-icon {
+            font-size: 1.5rem;
+            line-height: 1;
+        }
+
+        .host-control-title {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #92400e;
+        }
+
+        .host-control-desc {
+            font-size: 0.78rem;
+            color: #b45309;
+            margin-top: 2px;
+        }
+
+        .btn-host-edit {
+            background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+            color: #ffffff;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 0.88rem;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+            box-shadow: 0 2px 5px rgba(180, 83, 9, 0.3);
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+
+        .btn-host-edit:active {
+            transform: scale(0.96);
+        }
+
+        .host-badge-tag {
+            background-color: #fef3c7;
+            color: #b45309;
+            border: 1px solid #fde68a;
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 20px;
+            margin-left: 6px;
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+        }
+
         /* 參加者區塊標題列 */
         .section-header {
             display: flex;
@@ -1146,6 +1225,7 @@
         <div class="action-card-header">
             <div class="action-card-title">
                 <span>📝 報名與參與狀態</span>
+                <span class="host-badge-tag" id="hostBadge" style="display: none;">👑 本團主揪</span>
             </div>
             <span class="auth-status-badge badge-guest" id="authBadge" onclick="handleAuthClick()" style="cursor: pointer;" title="點擊登入 LINE 以確認身分">訪客模式 (點此登入)</span>
         </div>
@@ -1161,12 +1241,26 @@
 
         <!-- LINE 登入驗證成功之成員操作區 -->
         <div id="memberActionArea" style="display: none;">
+            <!-- 主揪專屬快捷控制區塊 (僅主揪本人可見) -->
+            <div id="hostControlBox" class="host-control-box" style="display: none;">
+                <div class="host-control-info">
+                    <span class="host-control-icon">👑</span>
+                    <div class="host-control-text">
+                        <div class="host-control-title">您是本活動主揪</div>
+                        <div class="host-control-desc">可直接切換至編輯頁面修改時間、地點或揪團內容</div>
+                    </div>
+                </div>
+                <button type="button" class="btn-host-edit" onclick="handleEditGroup()">
+                    ✏️ 修改揪團
+                </button>
+            </div>
+
             <div class="note-input-wrap">
                 <label for="userActionNote" class="note-input-label">活動備註 (選填，例如：開車+1、晚到半小時)</label>
                 <input type="text" id="userActionNote" class="note-input-field" maxlength="50" placeholder="請輸入備註文字...">
             </div>
             <div class="action-button-row" id="actionBtnRow">
-                <!-- 動態注入報名/改備註/退出按鈕 -->
+                <!-- 動態注入報名/改備註/退出/修改揪團按鈕 -->
             </div>
         </div>
     </div>
@@ -1329,6 +1423,7 @@
     let globalJoinedList = [];
     let globalJoinedNotesHistory = [];
     let globalJoinedNotes = {};
+    let allMembers = [];
     let targetMapUrl = '';
     let leafletMap = null;
     let serverTitleConfig = null;
@@ -1341,7 +1436,10 @@
         currentSeqId = window.SERVER_SEQ_ID || extractQueryParam('seqId') || extractQueryParam('id') || '1';
         loadGroupContent(currentSeqId);
 
-        // 3. 綁定個人名片滾動時自動關閉 Tooltip
+        // 3. 背景非同步預先載入全體成員名冊 (比照 members/ 模式，個人名片 0ms 秒開)
+        preloadMembersDirectory();
+
+        // 4. 綁定個人名片滾動時自動關閉 Tooltip
         const modalBody = document.querySelector('.profile-card-modal .modal-body');
         if (modalBody) {
             modalBody.addEventListener('scroll', hideBadgeTooltip);
@@ -1537,6 +1635,12 @@
             if (action === 'getGroup' || action === 'getContent') {
                 google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFailure).getContentFromSeqId(params.seqId);
                 return;
+            } else if (action === 'getMembers') {
+                google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFailure).apiGetMembers();
+                return;
+            } else if (action === 'getTitleConfig') {
+                google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFailure).apiGetTitleConfig();
+                return;
             } else if (action === 'joinGroup') {
                 google.script.run.withSuccessHandler(onSuccess).withFailureHandler(onFailure).apiJoinGroup(params.seqId, params.userId, params.noteText);
                 return;
@@ -1607,6 +1711,16 @@
         }
 
         currentGroupData = response;
+
+        // 預先載入全體成員名冊與稱號說明 (比照 members/ 模式，達成個人數位名片 0ms 秒開)
+        if (response.members && Array.isArray(response.members) && response.members.length > 0) {
+            allMembers = response.members;
+        } else if (!allMembers || allMembers.length === 0) {
+            preloadMembersDirectory();
+        }
+        if (response.titleConfig) {
+            serverTitleConfig = response.titleConfig;
+        }
 
         // 標題與內文
         document.getElementById("title").textContent = response.title || '揪團活動';
@@ -1787,15 +1901,33 @@
     }
 
     /**
-     * 刷新當前登入使用者的直接操作按鈕區 (報名/改備註/退出) 並同步名額狀態
+     * 刷新當前登入使用者的直接操作按鈕區 (報名/改備註/退出/修改揪團) 並同步名額與主揪狀態
      */
     function refreshUserActionArea() {
         if (!currentUserId) {
             updateAuthUI(false);
+            const hostBadge = document.getElementById('hostBadge');
+            if (hostBadge) hostBadge.style.display = 'none';
+            const hostControlBox = document.getElementById('hostControlBox');
+            if (hostControlBox) hostControlBox.style.display = 'none';
             return;
         }
 
         updateAuthUI(true, currentDisplayName);
+
+        // 判斷當前使用者是否為本團主揪本人
+        const isHost = !!(currentGroupData && currentGroupData.hostId &&
+            String(currentUserId).trim().toLowerCase() === String(currentGroupData.hostId).trim().toLowerCase());
+
+        // 同步主揪專屬標章與快捷控制卡
+        const hostBadge = document.getElementById('hostBadge');
+        if (hostBadge) {
+            hostBadge.style.display = isHost ? 'inline-flex' : 'none';
+        }
+        const hostControlBox = document.getElementById('hostControlBox');
+        if (hostControlBox) {
+            hostControlBox.style.display = isHost ? 'flex' : 'none';
+        }
 
         const btnRow = document.getElementById('actionBtnRow');
         const noteInput = document.getElementById('userActionNote');
@@ -1813,10 +1945,18 @@
             countDisplay.textContent = `${currentCount} / ${maxLimit === 99 ? '不限' : maxLimit}`;
         }
 
+        // 主揪專屬按鈕 HTML
+        const hostEditBtnHtml = isHost ? `
+            <button type="button" class="btn-act btn-edit-group" onclick="handleEditGroup()">
+                🛠️ 修改揪團
+            </button>
+        ` : '';
+
         if (isJoined) {
             // 已報名狀態：填入現有備註
             if (noteInput) noteInput.value = existingMember.note || '';
             btnRow.innerHTML = `
+                ${hostEditBtnHtml}
                 <button type="button" class="btn-act btn-update-note" onclick="handleUpdateNote()">
                     ✏️ 更新備註
                 </button>
@@ -1829,12 +1969,14 @@
             if (noteInput) noteInput.value = '';
             if (isFull) {
                 btnRow.innerHTML = `
+                    ${hostEditBtnHtml}
                     <button type="button" class="btn-act btn-full" disabled>
                         ❌ 人數已額滿 (${currentCount}/${maxLimit})
                     </button>
                 `;
             } else {
                 btnRow.innerHTML = `
+                    ${hostEditBtnHtml}
                     <button type="button" class="btn-act btn-join" onclick="handleJoinGroup()">
                         🙋‍♂️ 立即報名
                     </button>
@@ -2025,11 +2167,75 @@
     }
 
     /**
-     * 點擊參加者頭像開啟個人數位名片
+     * 主揪專屬修改揪團跳轉
+     */
+    function handleEditGroup() {
+        let editUrl = (currentGroupData && currentGroupData.editGroupUrl) || '';
+
+        // 若無直接取得之 editGroupUrl，嘗試提示確認 Static_Msgs 第 42 列
+        if (!editUrl) {
+            Swal.fire({
+                title: '無法切換至修改揪團',
+                text: '未取得修改揪團專屬網址，請確認試算表 Static_Msgs 第 42 列是否已配置修改揪團 Flex 訊息範本！',
+                icon: 'warning',
+                confirmButtonColor: '#4a8c72',
+                confirmButtonText: '確定'
+            });
+            return;
+        }
+
+        // 確保 seqId 參數已拼接
+        if (currentSeqId && !editUrl.includes('seqId=') && !editUrl.includes('id=')) {
+            const sep = editUrl.includes('?') ? '&' : '?';
+            editUrl = `${editUrl}${sep}seqId=${encodeURIComponent(currentSeqId)}`;
+        }
+
+        // 支援 LINE LIFF 環境與外部瀏覽器跳轉
+        if (window.liff && typeof liff.isInClient === 'function' && liff.isInClient()) {
+            try {
+                if (editUrl.startsWith('https://liff.line.me/')) {
+                    window.location.href = editUrl;
+                    return;
+                }
+            } catch (e) {}
+        }
+        window.location.href = editUrl;
+    }
+
+    /**
+     * 背景非同步預載成員名冊 (作為雙重保障，比照 members/ 模式)
+     */
+    function preloadMembersDirectory() {
+        callGasApi('getMembers', {}, function(res) {
+            if (res && res.success) {
+                if (Array.isArray(res.members) && res.members.length > 0) {
+                    allMembers = res.members;
+                }
+                if (res.titleConfig) {
+                    serverTitleConfig = res.titleConfig;
+                }
+            }
+        }, function(err) {
+            console.warn("背景預載成員名冊失敗:", err);
+        });
+    }
+
+    /**
+     * 點擊參加者頭像開啟個人數位名片 (預先載入快取秒開，比照 members/ 模式)
      */
     function openMemberProfile(userId) {
         if (!userId) return;
 
+        // 1. 優先從預先載入的 allMembers 快取中即時開啟 (0ms 零延遲秒開，無需轉圈等待)
+        if (allMembers && allMembers.length > 0) {
+            const cached = allMembers.find(m => m && m.id && String(m.id).trim().toLowerCase() === String(userId).trim().toLowerCase());
+            if (cached) {
+                displayProfileModal(cached);
+                return;
+            }
+        }
+
+        // 2. 快取未命中時之後端 RPC 查詢保底
         Swal.fire({
             title: '載入數位名片中...',
             allowOutsideClick: false,
@@ -2039,7 +2245,7 @@
         callGasApi('getMemberProfile', { userId: userId }, function(res) {
             Swal.close();
             if (res && res.success && res.profile) {
-                serverTitleConfig = res.titleConfig || null;
+                if (res.titleConfig) serverTitleConfig = res.titleConfig;
                 displayProfileModal(res.profile);
             } else {
                 Swal.fire('提示', (res && res.error) || '無法載入該成員資料', 'info');
@@ -2063,7 +2269,7 @@
 
         const joinDateEl = document.getElementById('cardJoinDate');
         if (joinDateEl) {
-            joinDateEl.textContent = p.joinDate ? `${p.joinDate} (${p.joinDays || 1}天)` : `已加入 ${p.joinDays || 1} 天`;
+            joinDateEl.textContent = (p.joinDate && p.joinDate !== '未填寫') ? `${p.joinDate} (${p.joinDays || 1}天)` : (p.joinDays ? `已加入 ${p.joinDays} 天` : '未填寫');
         }
 
         // 稱號徽章牆 (支援點擊查看 Tooltip 來源)
