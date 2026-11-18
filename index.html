@@ -1132,11 +1132,11 @@
 
         <!-- 雙日曆一鍵加入按鈕區 -->
         <div class="calendar-action-group">
-            <a id="googleCalButton" href="#" target="_blank" class="btn-calendar btn-gcal disabled">
-                <span>📅 Google 日曆 (一鍵加入)</span>
+            <a id="googleCalButton" href="#" class="btn-calendar btn-gcal disabled" onclick="handleGoogleCalClick(event)">
+                <span>📅 加入 Google 日曆</span>
             </a>
-            <a id="eventButton" href="#" target="_blank" class="btn-calendar btn-ical disabled">
-                <span>🍏 Apple / 下載 .ics</span>
+            <a id="eventButton" href="#" class="btn-calendar btn-ical disabled" onclick="handleIcalClick(event)">
+                <span>🍏 加入 Apple 日曆 </span>
             </a>
         </div>
     </div>
@@ -1324,6 +1324,7 @@
     let currentSeqId = null;
     let currentUserId = null;
     let currentDisplayName = null;
+    let currentUserPic = '';
     let currentGroupData = null;
     let globalJoinedList = [];
     let globalJoinedNotesHistory = [];
@@ -1400,6 +1401,8 @@
         try {
             const cachedUid = localStorage.getItem('ls_member_uid');
             const cachedName = localStorage.getItem('ls_member_name');
+            const cachedPic = localStorage.getItem('ls_member_pic');
+            if (cachedPic) currentUserPic = cachedPic;
             if (cachedUid && !currentUserId) {
                 handleLoginSuccess(cachedUid, cachedName || '社群成員');
             }
@@ -1444,6 +1447,10 @@
                 // 檢查 Profile
                 if (liff.isLoggedIn()) {
                     liff.getProfile().then(profile => {
+                        if (profile && profile.pictureUrl) {
+                            currentUserPic = profile.pictureUrl;
+                            try { localStorage.setItem('ls_member_pic', profile.pictureUrl); } catch (e) {}
+                        }
                         handleLoginSuccess(profile.userId, profile.displayName);
                     }).catch(err => {
                         console.warn("LIFF getProfile 失敗:", err);
@@ -1523,6 +1530,7 @@
     function callGasApi(action, params, onSuccess, onFailure) {
         params = params || {};
         params.action = action;
+        params._t = Date.now(); // 附加時間戳記徹底杜絕瀏覽器快取舊資料
 
         // 1. 若在 GAS 環境中且有 google.script.run
         if (window.google && google.script && google.script.run) {
@@ -1558,14 +1566,18 @@
         fetch(GAS_API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify(params)
+            body: JSON.stringify(params),
+            cache: 'no-store'
         })
         .then(r => r.json())
         .then(onSuccess)
         .catch(postErr => {
             console.warn("POST 請求受限，嘗試以 GET 模式重試:", postErr);
             const query = new URLSearchParams(params).toString();
-            fetch(GAS_API_URL + '?' + query)
+            fetch(GAS_API_URL + '?' + query, {
+                method: 'GET',
+                cache: 'no-store'
+            })
                 .then(r => r.json())
                 .then(onSuccess)
                 .catch(err => {
@@ -1639,16 +1651,22 @@
         const gcalBtn = document.getElementById("googleCalButton");
         if (response.googleCalendarUrl) {
             gcalBtn.href = response.googleCalendarUrl;
+            gcalBtn.dataset.url = response.googleCalendarUrl;
             gcalBtn.classList.remove('disabled');
         } else {
+            gcalBtn.href = '#';
+            gcalBtn.dataset.url = '';
             gcalBtn.classList.add('disabled');
         }
 
         const icalBtn = document.getElementById("eventButton");
         if (response.eventUrl) {
             icalBtn.href = response.eventUrl;
+            icalBtn.dataset.url = response.eventUrl;
             icalBtn.classList.remove('disabled');
         } else {
+            icalBtn.href = '#';
+            icalBtn.dataset.url = '';
             icalBtn.classList.add('disabled');
         }
 
@@ -1711,7 +1729,65 @@
     }
 
     /**
-     * 刷新當前登入使用者的直接操作按鈕區 (報名/改備註/退出)
+     * Google 日曆一鍵加入點擊處理 (相容 LINE LIFF 外部瀏覽器喚醒)
+     */
+    function handleGoogleCalClick(event) {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        const gcalBtn = document.getElementById("googleCalButton");
+        if (!gcalBtn || gcalBtn.classList.contains('disabled')) return;
+        const url = gcalBtn.dataset.url || gcalBtn.getAttribute('href');
+        if (!url || url === '#' || url.startsWith('javascript:')) return;
+
+        // 若在 LINE / LIFF 環境中，強制透過外部瀏覽器開啟 (避免 LINE 內嵌 Webview 攔截導致跳轉 Google 首頁)
+        if (window.liff && typeof liff.isInClient === 'function' && liff.isInClient()) {
+            try {
+                liff.openWindow({
+                    url: url,
+                    external: true
+                });
+                return;
+            } catch (e) {
+                console.warn("liff.openWindow 失敗，降級為 window.open:", e);
+            }
+        }
+
+        // 原生/外部瀏覽器環境直接開啟
+        window.open(url, '_blank');
+    }
+
+    /**
+     * Apple 日曆 / .ics 下載點擊處理 (相容 LINE LIFF 外部瀏覽器喚醒)
+     */
+    function handleIcalClick(event) {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        const icalBtn = document.getElementById("eventButton");
+        if (!icalBtn || icalBtn.classList.contains('disabled')) return;
+        const url = icalBtn.dataset.url || icalBtn.getAttribute('href');
+        if (!url || url === '#' || url.startsWith('javascript:')) return;
+
+        if (window.liff && typeof liff.isInClient === 'function' && liff.isInClient()) {
+            try {
+                liff.openWindow({
+                    url: url,
+                    external: true
+                });
+                return;
+            } catch (e) {
+                console.warn("liff.openWindow 失敗，降級為 window.open:", e);
+            }
+        }
+
+        window.open(url, '_blank');
+    }
+
+    /**
+     * 刷新當前登入使用者的直接操作按鈕區 (報名/改備註/退出) 並同步名額狀態
      */
     function refreshUserActionArea() {
         if (!currentUserId) {
@@ -1727,13 +1803,19 @@
         const existingMember = globalJoinedList.find(m => String(m.id).toLowerCase() === currentUserId.toLowerCase());
         const isJoined = !!existingMember;
 
-        const maxLimit = parseInt(currentGroupData.maxLimit, 10) || 99;
+        const maxLimit = parseInt((currentGroupData && currentGroupData.maxLimit), 10) || 99;
         const currentCount = globalJoinedList.length;
         const isFull = (maxLimit !== 99 && currentCount >= maxLimit);
 
+        // 同步名額顯示
+        const countDisplay = document.getElementById('countDisplay');
+        if (countDisplay) {
+            countDisplay.textContent = `${currentCount} / ${maxLimit === 99 ? '不限' : maxLimit}`;
+        }
+
         if (isJoined) {
             // 已報名狀態：填入現有備註
-            noteInput.value = existingMember.note || '';
+            if (noteInput) noteInput.value = existingMember.note || '';
             btnRow.innerHTML = `
                 <button type="button" class="btn-act btn-update-note" onclick="handleUpdateNote()">
                     ✏️ 更新備註
@@ -1743,7 +1825,8 @@
                 </button>
             `;
         } else {
-            // 未報名狀態
+            // 未報名狀態：清空備註輸入框
+            if (noteInput) noteInput.value = '';
             if (isFull) {
                 btnRow.innerHTML = `
                     <button type="button" class="btn-act btn-full" disabled>
@@ -1769,7 +1852,8 @@
             return;
         }
 
-        const noteText = document.getElementById('userActionNote').value.trim();
+        const noteInput = document.getElementById('userActionNote');
+        const noteText = noteInput ? noteInput.value.trim() : '';
 
         Swal.fire({
             title: '確認報名',
@@ -1791,6 +1875,39 @@
                 callGasApi('joinGroup', { seqId: currentSeqId, userId: currentUserId, noteText: noteText }, function(res) {
                     if (res && res.success) {
                         Swal.fire('報名成功！', '您已成功加入本活動名單 🎉', 'success');
+
+                        // 1. 即時樂觀更新本機名冊狀態
+                        const myName = currentDisplayName || '已登入成員';
+                        const myPic = currentUserPic || 'https://imgur.com/786FxAA.jpg';
+                        const existingIdx = globalJoinedList.findIndex(m => String(m.id).toLowerCase() === currentUserId.toLowerCase());
+                        if (existingIdx === -1) {
+                            globalJoinedList.push({
+                                id: currentUserId,
+                                name: myName,
+                                pic: myPic,
+                                note: noteText || ''
+                            });
+                        } else {
+                            globalJoinedList[existingIdx].note = noteText || '';
+                        }
+
+                        if (!globalJoinedNotes) globalJoinedNotes = {};
+                        if (noteText) {
+                            globalJoinedNotes[currentUserId] = { note: noteText, time: '剛剛' };
+                        } else {
+                            delete globalJoinedNotes[currentUserId];
+                        }
+
+                        if (currentGroupData) {
+                            currentGroupData.joinedList = globalJoinedList;
+                            currentGroupData.currentCount = globalJoinedList.length;
+                        }
+
+                        // 2. 即時重新渲染名單與操作按鈕區
+                        renderMemberList();
+                        refreshUserActionArea();
+
+                        // 3. 背景向伺服器拉取最新資料完成校準
                         loadGroupContent(currentSeqId);
                     } else {
                         Swal.fire('報名失敗', (res && res.error) || '發生未知錯誤', 'error');
@@ -1807,7 +1924,8 @@
      */
     function handleUpdateNote() {
         if (!currentUserId || !currentSeqId) return;
-        const noteText = document.getElementById('userActionNote').value.trim();
+        const noteInput = document.getElementById('userActionNote');
+        const noteText = noteInput ? noteInput.value.trim() : '';
 
         Swal.fire({
             title: '更新備註中...',
@@ -1818,9 +1936,24 @@
         callGasApi('updateNote', { seqId: currentSeqId, userId: currentUserId, noteText: noteText }, function(res) {
             if (res && res.success) {
                 Swal.fire('更新成功！', '您的備註已成功儲存', 'success');
+
+                // 1. 即時更新本機名單中的成員備註
                 let member = globalJoinedList.find(m => String(m.id).toLowerCase() === currentUserId.toLowerCase());
                 if (member) member.note = noteText;
+
+                if (!globalJoinedNotes) globalJoinedNotes = {};
+                if (noteText) {
+                    globalJoinedNotes[currentUserId] = { note: noteText, time: '剛剛' };
+                } else {
+                    delete globalJoinedNotes[currentUserId];
+                }
+
+                // 2. 重新渲染名冊與操作區
                 renderMemberList();
+                refreshUserActionArea();
+
+                // 3. 背景向伺服器拉取最新資料校準
+                loadGroupContent(currentSeqId);
             } else {
                 Swal.fire('更新失敗', (res && res.error) || '發生未知錯誤', 'error');
             }
@@ -1855,6 +1988,31 @@
                 callGasApi('leaveGroup', { seqId: currentSeqId, userId: currentUserId }, function(res) {
                     if (res && res.success) {
                         Swal.fire('已退出', '您已退出本揪團活動', 'info');
+
+                        // 1. 即時從名單中剔除使用者並清空備註快取
+                        globalJoinedList = globalJoinedList.filter(m => String(m.id).toLowerCase() !== currentUserId.toLowerCase());
+                        if (globalJoinedNotes) {
+                            delete globalJoinedNotes[currentUserId];
+                            for (let k in globalJoinedNotes) {
+                                if (k.toLowerCase() === currentUserId.toLowerCase()) delete globalJoinedNotes[k];
+                            }
+                        }
+
+                        // 2. 清空備註欄位
+                        const noteInput = document.getElementById('userActionNote');
+                        if (noteInput) noteInput.value = '';
+
+                        // 3. 更新當前計數
+                        if (currentGroupData) {
+                            currentGroupData.joinedList = globalJoinedList;
+                            currentGroupData.currentCount = globalJoinedList.length;
+                        }
+
+                        // 4. 即時重新渲染名單與操作區 (切換回「立即報名」按鈕)
+                        renderMemberList();
+                        refreshUserActionArea();
+
+                        // 5. 背景向伺服器拉取最新資料校準
                         loadGroupContent(currentSeqId);
                     } else {
                         Swal.fire('退出失敗', (res && res.error) || '發生未知錯誤', 'error');
@@ -2214,6 +2372,12 @@
 
     function openLocationMap() {
         if (targetMapUrl) {
+            if (window.liff && typeof liff.isInClient === 'function' && liff.isInClient()) {
+                try {
+                    liff.openWindow({ url: targetMapUrl, external: true });
+                    return;
+                } catch (e) {}
+            }
             window.open(targetMapUrl, '_blank');
         }
     }
