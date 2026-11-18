@@ -1317,7 +1317,7 @@
     // 方案 A 前後端分離配置 (GitHub Pages 前端 + Google Apps Script 後端 API)
     // =========================================================================
     // 請將下方網址替換為您的 Google Apps Script Web App 部署網址 (必須為 /exec 結尾)
-    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzrQGg-d-wwhAOk5ma4uRI50dDNaEqin-ttrRqZ1En2/dev";
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbx_fYHcCd2WlOVLaoJiVCYrpuTKGCuIs1XWiwzdl2-7S6f4CjCvsc7j-iNL_EDxHJ15pQ/exec";
     const DEFAULT_LIFF_ID = "2005700153-GqMvVinD";
 
     // 全域變數
@@ -1331,44 +1331,6 @@
     let targetMapUrl = '';
     let leafletMap = null;
     let serverTitleConfig = null;
-
-    // 前端預設稱號門檻與說明配置 (作為後端載入前或未知稱號的 Fallback 備援)
-    const DEFAULT_TITLE_CONFIG = {
-        hostTiers: [
-            { min: 15, name: "揪團之神", desc: "舉辦揪團累計達 15 次以上，社群主揪至尊榮耀！" },
-            { min: 7,  name: "揪團達人", desc: "舉辦揪團累計達 7 次以上，超活躍主辦達人！" },
-            { min: 3,  name: "揪團熟手", desc: "舉辦揪團累計達 3 次以上，熱心開團好夥伴！" },
-            { min: 1,  name: "揪團菜鳥", desc: "初次發起揪團活動，熱血踏出第一步！" }
-        ],
-        joinTiers: [
-            { min: 100, name: "參團之神", desc: "累計參加揪團活動達 100 次以上，聚會靈魂神級人物！" },
-            { min: 50,  name: "參團達人", desc: "累計參加揪團活動達 50 次以上，場場不落的聚會核心！" },
-            { min: 20,  name: "參團常客", desc: "累計參加揪團活動達 20 次以上，社群聚會熟面孔！" },
-            { min: 5,   name: "參團熟手", desc: "累計參加揪團活動達 5 次以上，積極參與社群生活！" },
-            { min: 1,   name: "參團菜鳥", desc: "累計參加揪團活動達 1 次以上，聚會初體驗達成！" }
-        ],
-        unsendTiers: [
-            { min: 200, name: "失憶魔術師", desc: "在群組累計收回訊息達 200 次以上，神龍見首不見尾！" },
-            { min: 100, name: "放羊的孩子", desc: "在群組累計收回訊息達 100 次以上，手速極快的收回大師！" },
-            { min: 50,  name: "說話不算話", desc: "在群組累計收回訊息達 50 次以上，話說出口又悄悄帶走～" },
-            { min: 20,  name: "剛剛有說話？", desc: "在群組累計收回訊息達 20 次以上，幽默手滑日常！" },
-            { min: 5,   name: "是口誤嗎？", desc: "在群組累計收回訊息達 5 次以上，小心翼翼的發言家！" }
-        ],
-        photoTiers: [
-            { min: 200, name: "攝影狂人", desc: "在群組累計分享照片/影片達 200 張以上，精彩生活捕捉大師！" },
-            { min: 50,  name: "快門手", desc: "在群組累計分享照片/影片達 50 張以上，熱愛分享生活點滴！" }
-        ],
-        founderTitle: "2022開國元老",
-        founderYear: "2022",
-        founderDesc: "2022 年創群初期即加入社群，一路相伴至今的資深開創元老！",
-        birthdayTitle: "本月壽星",
-        birthdayDesc: "當月份生日的壽星成員，享有全體群友溫暖祝福！",
-        rankChampionDesc: "榮獲群組月度或年度長舌榜第 1 名冠軍，無人能及的話題之王！（結算永久紀錄）",
-        rankRunnerUpDesc: "榮獲群組月度或年度長舌榜第 2 名亞軍，社群熱烈討論的核心推手！（結算永久紀錄）",
-        rankThirdPlaceDesc: "榮獲群組月度或年度長舌榜第 3 名季軍，活躍不打烊的發言好手！（結算永久紀錄）",
-        rankGeneralDesc: "榮獲社群發言長舌榜榮譽成就！（結算永久紀錄）",
-        customBadges: {}
-    };
 
     document.addEventListener('DOMContentLoaded', function() {
         // 1. 初始化身分認證 (多重架構：後端注入 + Context + ID Token + Profile + 本地持久化)
@@ -1919,7 +1881,7 @@
         callGasApi('getMemberProfile', { userId: userId }, function(res) {
             Swal.close();
             if (res && res.success && res.profile) {
-                if (res.titleConfig) serverTitleConfig = res.titleConfig;
+                serverTitleConfig = res.titleConfig || null;
                 displayProfileModal(res.profile);
             } else {
                 Swal.fire('提示', (res && res.error) || '無法載入該成員資料', 'info');
@@ -1955,11 +1917,13 @@
                 else if (b.includes('達人') || b.includes('元老')) badgeClass += ' gold';
                 const info = getBadgeInfo(b);
                 const safeBadge = escapeHtml(b);
-                const safeDesc = escapeHtml(info.desc);
-                badgeHtml += `<span class="${badgeClass}" onclick="showBadgeTooltip(event, '${safeBadge}')" title="點擊查看說明：${safeDesc}">${safeBadge}</span>`;
+                if (info && info.desc) {
+                    const safeDesc = escapeHtml(info.desc);
+                    badgeHtml += `<span class="${badgeClass}" onclick="showBadgeTooltip(event, '${safeBadge}')" title="點擊查看說明：${safeDesc}">${safeBadge}</span>`;
+                } else {
+                    badgeHtml += `<span class="${badgeClass}">${safeBadge}</span>`;
+                }
             });
-        } else {
-            badgeHtml = '<span style="color:#9ca3af;font-size:0.8rem;">尚無特殊稱號勳章</span>';
         }
         document.getElementById('cardBadges').innerHTML = badgeHtml;
 
@@ -1996,48 +1960,51 @@
     }
 
     /**
-     * 稱號說明查詢 (優先讀取後端 titleConfig，Fallback 使用 DEFAULT_TITLE_CONFIG)
+     * 稱號說明查詢 (優先讀取後端 Static_Msgs titleConfig，若無則靜默不顯示)
      */
     function getBadgeInfo(badgeName) {
-        if (!badgeName) return { title: '', desc: '社群成員成就稱號' };
+        if (!badgeName || !serverTitleConfig) return { title: badgeName || '', desc: '' };
         let bName = String(badgeName).replace(/^[👑🎒🙈🏛️🏆🥈🥉📸✨🎖️\s]+/, '').trim();
-        const cfg = serverTitleConfig || DEFAULT_TITLE_CONFIG;
+        const cfg = serverTitleConfig;
 
         if (cfg.customBadges && cfg.customBadges[bName]) {
-            return { title: bName, desc: cfg.customBadges[bName] };
+            return { title: bName, desc: cfg.customBadges[bName] || "" };
         }
-        if (cfg.hostTiers) {
+        if (cfg.hostTiers && Array.isArray(cfg.hostTiers)) {
             let found = cfg.hostTiers.find(t => t.name === bName);
-            if (found) return { title: found.name, desc: found.desc || `舉辦揪團累計達 ${found.min} 次以上` };
+            if (found) return { title: found.name, desc: found.desc || "" };
         }
-        if (cfg.joinTiers) {
+        if (cfg.joinTiers && Array.isArray(cfg.joinTiers)) {
             let found = cfg.joinTiers.find(t => t.name === bName);
-            if (found) return { title: found.name, desc: found.desc || `參加揪團累計達 ${found.min} 次以上` };
+            if (found) return { title: found.name, desc: found.desc || "" };
         }
-        if (cfg.unsendTiers) {
+        if (cfg.unsendTiers && Array.isArray(cfg.unsendTiers)) {
             let found = cfg.unsendTiers.find(t => t.name === bName);
-            if (found) return { title: found.name, desc: found.desc || `收回訊息累計達 ${found.min} 次以上` };
+            if (found) return { title: found.name, desc: found.desc || "" };
         }
-        if (cfg.photoTiers) {
+        if (cfg.photoTiers && Array.isArray(cfg.photoTiers)) {
             let found = cfg.photoTiers.find(t => t.name === bName);
-            if (found) return { title: found.name, desc: found.desc || `傳送圖片/影片累計達 ${found.min} 張以上` };
+            if (found) return { title: found.name, desc: found.desc || "" };
         }
-        if (bName.includes(cfg.founderTitle || "開國元老")) {
-            return { title: cfg.founderTitle || "開國元老", desc: cfg.founderDesc || "2022 年創群初期即加入社群之資深元老！" };
+        if (cfg.founderTitle && bName.includes(cfg.founderTitle)) {
+            return { title: cfg.founderTitle, desc: cfg.founderDesc || "" };
         }
         if (bName.includes("壽星")) {
-            return { title: "本月壽星", desc: cfg.birthdayDesc || "當月份生日的壽星成員！" };
+            return { title: "本月壽星", desc: cfg.birthdayDesc || "" };
         }
-        if (bName.includes("冠軍")) {
-            return { title: bName, desc: cfg.rankChampionDesc || "榮獲長舌榜第 1 名冠軍！（結算永久紀錄）" };
+        if (bName.includes("長舌冠軍") || bName.includes("長舌榜冠軍") || bName.includes("長舌第一名")) {
+            return { title: bName, desc: cfg.rankChampionDesc || "" };
         }
-        if (bName.includes("亞軍")) {
-            return { title: bName, desc: cfg.rankRunnerUpDesc || "榮獲長舌榜第 2 名亞軍！（結算永久紀錄）" };
+        if (bName.includes("長舌亞軍") || bName.includes("長舌榜亞軍") || bName.includes("長舌第二名")) {
+            return { title: bName, desc: cfg.rankRunnerUpDesc || "" };
         }
-        if (bName.includes("季軍")) {
-            return { title: bName, desc: cfg.rankThirdPlaceDesc || "榮獲長舌榜第 3 名季軍！（結算永久紀錄）" };
+        if (bName.includes("長舌季軍") || bName.includes("長舌榜季軍") || bName.includes("長舌第三名")) {
+            return { title: bName, desc: cfg.rankThirdPlaceDesc || "" };
         }
-        return { title: bName, desc: cfg.rankGeneralDesc || `獲得「${bName}」榮譽成就稱號！` };
+        if (bName.includes("長舌")) {
+            return { title: bName, desc: cfg.rankGeneralDesc || "" };
+        }
+        return { title: bName, desc: "" };
     }
 
     /**
@@ -2054,8 +2021,13 @@
             return;
         }
 
-        const badgeEl = event.currentTarget;
         const info = getBadgeInfo(badgeName);
+        if (!info || !info.desc) {
+            hideBadgeTooltip();
+            return;
+        }
+
+        const badgeEl = event.currentTarget;
 
         document.getElementById('badgeTooltipTitle').textContent = info.title;
         document.getElementById('badgeTooltipDesc').textContent = '💡 來源：' + info.desc;
