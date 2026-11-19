@@ -889,7 +889,7 @@
             box-shadow: 0 4px 12px rgba(0,0,0,0.2);
             margin: 0 auto 10px;
             display: block;
-            cursor: pointer;
+            cursor: zoom-in;
             transition: transform 0.2s;
         }
 
@@ -906,6 +906,44 @@
         .modal-user-sub {
             font-size: 0.8rem;
             opacity: 0.9;
+        }
+
+        /* 頭像下方綠底區域之社群媒體超連結 */
+        .modal-social-links {
+            display: none;
+            justify-content: center;
+            align-items: center;
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .modal-social-links.has-links {
+            display: flex;
+        }
+
+        .social-link-btn {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.94);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+            transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+        }
+
+        .social-link-btn:hover, .social-link-btn:active {
+            transform: translateY(-2px) scale(1.06);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.24);
+            background: #ffffff;
+        }
+
+        .social-link-btn svg {
+            width: 18px;
+            height: 18px;
+            display: block;
         }
 
         .modal-body {
@@ -1146,12 +1184,41 @@
             background: #05b04c;
         }
 
-        /* 圖片放大 Lightbox */
+        /* 圖片放大 Lightbox (確保層級高於名片 Modal) */
+        #img-lightbox {
+            z-index: 4000;
+            background-color: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(4px);
+        }
+
         #img-lightbox img {
-            max-width: 90%;
-            max-height: 80vh;
-            border-radius: 12px;
-            box-shadow: 0 0 24px rgba(255,255,255,0.15);
+            max-width: 92%;
+            max-height: 82vh;
+            border-radius: 14px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+            object-fit: contain;
+        }
+
+        .lightbox-close-btn {
+            position: absolute;
+            top: 18px;
+            right: 18px;
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(255, 255, 255, 0.2);
+            color: #ffffff;
+            font-size: 1.15rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+
+        .lightbox-close-btn:hover {
+            background: rgba(255, 255, 255, 0.35);
         }
 
         @keyframes fadeInUp {
@@ -1281,7 +1348,8 @@
 
 <!-- 圖片放大 Lightbox -->
 <div id="img-lightbox" class="lightbox" onclick="closeImgLightbox()">
-    <img id="lightbox-image" onclick="event.stopPropagation()">
+    <button type="button" class="lightbox-close-btn" onclick="closeImgLightbox()" aria-label="關閉預覽">✕</button>
+    <img id="lightbox-image" alt="頭像預覽" onclick="event.stopPropagation()">
 </div>
 
 <!-- 複製全員標記 Lightbox -->
@@ -1324,11 +1392,16 @@
             <img id="cardAvatar" class="modal-avatar" src="" alt="avatar" onclick="showImgLightbox(this.src)" title="點擊放大頭像">
             <div class="modal-user-name" id="cardName">載入中...</div>
             <div class="modal-user-sub" id="cardJoinDays">入群天數計算中...</div>
+            <div class="modal-social-links" id="cardSocialLinks"></div>
         </div>
 
         <div class="modal-body">
-            <!-- 資訊網格 (星座、居住地、職業、感情狀態、入群日期) -->
+            <!-- 資訊網格 (年齡、星座、居住地、職業、感情狀態、入群日期) -->
             <div class="info-grid">
+                <div class="info-cell">
+                    <span class="info-cell-title">🎂 年齡</span>
+                    <span class="info-cell-val" id="cardAge">秘密 🤫</span>
+                </div>
                 <div class="info-cell">
                     <span class="info-cell-title">✨ 星座</span>
                     <span class="info-cell-val" id="cardZodiac">--</span>
@@ -1345,7 +1418,7 @@
                     <span class="info-cell-title">💖 感情狀態</span>
                     <span class="info-cell-val" id="cardRelationship">--</span>
                 </div>
-                <div class="info-cell" style="grid-column: span 2;">
+                <div class="info-cell">
                     <span class="info-cell-title">📅 入群日期</span>
                     <span class="info-cell-val" id="cardJoinDate">--</span>
                 </div>
@@ -1672,21 +1745,21 @@
             body: JSON.stringify(params),
             cache: 'no-store'
         })
-        .then(r => r.json())
-        .then(onSuccess)
-        .catch(postErr => {
-            console.warn("POST 請求受限，嘗試以 GET 模式重試:", postErr);
-            const query = new URLSearchParams(params).toString();
-            fetch(GAS_API_URL + '?' + query, {
-                method: 'GET',
-                cache: 'no-store'
-            })
-                .then(r => r.json())
-                .then(onSuccess)
-                .catch(err => {
-                    if (onFailure) onFailure(err);
-                });
-        });
+            .then(r => r.json())
+            .then(onSuccess)
+            .catch(postErr => {
+                console.warn("POST 請求受限，嘗試以 GET 模式重試:", postErr);
+                const query = new URLSearchParams(params).toString();
+                fetch(GAS_API_URL + '?' + query, {
+                    method: 'GET',
+                    cache: 'no-store'
+                })
+                    .then(r => r.json())
+                    .then(onSuccess)
+                    .catch(err => {
+                        if (onFailure) onFailure(err);
+                    });
+            });
     }
 
     /**
@@ -2244,7 +2317,9 @@
         document.getElementById('cardAvatar').src = p.pic || 'https://imgur.com/786FxAA.jpg';
         document.getElementById('cardName').textContent = p.name || '神秘群友';
         document.getElementById('cardJoinDays').textContent = `已加入 L>S 社群 ${p.joinDays || 1} 天`;
+        renderSocialLinks('cardSocialLinks', p.socialLinks);
 
+        document.getElementById('cardAge').textContent = p.age || '秘密 🤫';
         document.getElementById('cardZodiac').textContent = p.zodiac || '秘密 🤫';
         document.getElementById('cardRelationship').textContent = p.relationship || '未填寫';
         document.getElementById('cardResidence').textContent = p.residence || '未填寫';
@@ -2587,7 +2662,93 @@
             .replace(/'/g, "&#039;");
     }
 
+    const SOCIAL_PLATFORMS = [
+        {
+            key: 'instagram',
+            label: 'Instagram',
+            svg: '<svg viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="igGrad-modal" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="#f09433"/><stop offset="25%" stop-color="#e6683c"/><stop offset="50%" stop-color="#dc2743"/><stop offset="75%" stop-color="#cc2366"/><stop offset="100%" stop-color="#bc1888"/></linearGradient></defs><path fill="url(#igGrad-modal)" d="M7.75 2h8.5A5.75 5.75 0 0 1 22 7.75v8.5A5.75 5.75 0 0 1 16.25 22h-8.5A5.75 5.75 0 0 1 2 16.25v-8.5A5.75 5.75 0 0 1 7.75 2zm0 1.8A3.95 3.95 0 0 0 3.8 7.75v8.5A3.95 3.95 0 0 0 7.75 20.2h8.5a3.95 3.95 0 0 0 3.95-3.95v-8.5a3.95 3.95 0 0 0-3.95-3.95h-8.5zm8.95 1.5a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4zM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 1.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4z"/></svg>'
+        },
+        {
+            key: 'x',
+            label: 'X',
+            svg: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#111827" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>'
+        },
+        {
+            key: 'facebook',
+            label: 'Facebook',
+            svg: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#1877F2" d="M22 12c0-5.523-4.477-10-10-10S2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.878v-6.987h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.988C18.343 21.128 22 16.991 22 12z"/></svg>'
+        }
+    ];
+
+    function normalizeSocialUrl(platform, raw) {
+        if (!raw) return '';
+        const val = String(raw).trim();
+        if (!val) return '';
+        if (/^https?:\/\//i.test(val)) return val;
+        if (/^[a-z][a-z0-9+.-]*:/i.test(val)) return '';
+
+        if (
+            /^(?:www\.|m\.)?(?:instagram\.com|instagr\.am)\//i.test(val) ||
+            /^(?:www\.|mobile\.)?(?:x\.com|twitter\.com)\//i.test(val) ||
+            /^(?:www\.|m\.)?(?:facebook\.com|fb\.com|fb\.me)\//i.test(val)
+        ) {
+            return 'https://' + val;
+        }
+
+        const handle = val.replace(/^@+/, '').replace(/^\/+|\/+$/g, '').trim();
+        if (!handle) return '';
+        if (platform === 'instagram') return 'https://www.instagram.com/' + encodeURIComponent(handle);
+        if (platform === 'x') return 'https://x.com/' + encodeURIComponent(handle);
+        if (platform === 'facebook') return 'https://www.facebook.com/' + encodeURIComponent(handle);
+        return '';
+    }
+
+    function renderSocialLinks(containerId, socialLinks) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        const links = socialLinks && typeof socialLinks === 'object' ? socialLinks : {};
+        let html = '';
+        SOCIAL_PLATFORMS.forEach(p => {
+            const url = normalizeSocialUrl(p.key, links[p.key]);
+            if (url && /^https?:\/\//i.test(url)) {
+                const safeUrl = escapeHtml(url);
+                html += `<a class="social-link-btn" href="${safeUrl}" data-url="${safeUrl}" target="_blank" rel="noopener noreferrer" title="在瀏覽器開啟 ${p.label}" aria-label="${p.label}" onclick="openExternalUrl(event, this.dataset.url)">${p.svg}</a>`;
+            }
+        });
+
+        container.innerHTML = html;
+        container.classList.toggle('has-links', html !== '');
+    }
+
+    function openExternalUrl(event, url) {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        if (!url || !/^https?:\/\//i.test(url)) return;
+
+        if (window.liff && typeof liff.isInClient === 'function' && liff.isInClient()) {
+            try {
+                liff.openWindow({
+                    url: url,
+                    external: true
+                });
+                return;
+            } catch (e) {
+                console.warn("liff.openWindow 失敗，降級為外部瀏覽器開啟:", e);
+            }
+        }
+
+        let targetUrl = url;
+        if (/Line\//i.test(navigator.userAgent) && !/[?&]openExternalBrowser=1/i.test(targetUrl)) {
+            targetUrl += (targetUrl.includes('?') ? '&' : '?') + 'openExternalBrowser=1';
+        }
+        window.open(targetUrl, '_blank', 'noopener,noreferrer');
+    }
+
     function showImgLightbox(imageUrl) {
+        if (!imageUrl) return;
         const lightbox = document.getElementById('img-lightbox');
         const img = document.getElementById('lightbox-image');
         img.src = imageUrl;
@@ -2597,6 +2758,20 @@
     function closeImgLightbox() {
         document.getElementById('img-lightbox').classList.remove('active');
     }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            const imgLightbox = document.getElementById('img-lightbox');
+            if (imgLightbox && imgLightbox.classList.contains('active')) {
+                closeImgLightbox();
+                return;
+            }
+            const profileModal = document.getElementById('profileModalOverlay');
+            if (profileModal && profileModal.classList.contains('active')) {
+                closeProfileModal();
+            }
+        }
+    });
 
     function openNoteHistoryModal(userId, userName) {
         const titleEl = document.getElementById('noteHistoryTitle');
