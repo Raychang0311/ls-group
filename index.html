@@ -2385,7 +2385,7 @@
 
         const joinDateEl = document.getElementById('cardJoinDate');
         if (joinDateEl) {
-            joinDateEl.textContent = (p.joinDate && p.joinDate !== '未填寫') ? `${p.joinDate} (${p.joinDays || 1}天)` : (p.joinDays ? `已加入 ${p.joinDays} 天` : '未填寫');
+            joinDateEl.textContent = `${p.joinDate}`;
         }
 
         // 稱號徽章牆 (支援點擊查看 Tooltip 來源)
