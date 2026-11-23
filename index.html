@@ -2370,6 +2370,37 @@
         });
     }
 
+    function computeAgeDisplay(ageRaw, birthdayStr, hasBirthday, birthdayPassed) {
+        if (ageRaw === undefined || ageRaw === null) return '秘密 🤫';
+        const clean = String(ageRaw).trim().replace(/[歲年]$/g, '').trim();
+        if (!clean || clean === '秘密' || clean === '秘密 🤫') return '秘密 🤫';
+        if (!/^\d+$/.test(clean)) return clean;
+
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        let num = parseInt(clean, 10);
+        if (num <= 0) return '秘密 🤫';
+        if (num > currentYear) num = currentYear;
+
+        if (num <= 1899) {
+            return `永遠的${num}歲`;
+        }
+
+        let age = currentYear - num;
+        const bdayMatch = birthdayStr ? String(birthdayStr).trim().match(/^(?:\d{4}[-/])?(\d{1,2})[-/](\d{1,2})$/) : null;
+        if (bdayMatch) {
+            const bMonth = parseInt(bdayMatch[1], 10);
+            const bDay = parseInt(bdayMatch[2], 10);
+            const curMonth = now.getMonth() + 1;
+            const curDay = now.getDate();
+            const passed = (curMonth > bMonth) || (curMonth === bMonth && curDay >= bDay);
+            if (!passed) age -= 1;
+        } else if (hasBirthday && birthdayPassed === false) {
+            age -= 1;
+        }
+        return `${Math.max(0, age)}歲`;
+    }
+
     function displayProfileModal(p, sourceEl) {
         hideBadgeTooltip();
         document.getElementById('cardAvatar').src = p.pic || 'https://imgur.com/786FxAA.jpg';
@@ -2377,7 +2408,9 @@
         document.getElementById('cardJoinDays').textContent = `已加入 L>S 社群 ${p.joinDays || 1} 天`;
         renderSocialLinks('cardSocialLinks', p.socialLinks);
 
-        document.getElementById('cardAge').textContent = p.age || '秘密 🤫';
+        document.getElementById('cardAge').textContent = (p.ageRaw !== undefined)
+            ? computeAgeDisplay(p.ageRaw, p.birthday, p.hasBirthday, p.birthdayPassed)
+            : (p.age || '秘密 🤫');
         document.getElementById('cardZodiac').textContent = p.zodiac || '秘密 🤫';
         document.getElementById('cardRelationship').textContent = p.relationship || '未填寫';
         document.getElementById('cardResidence').textContent = p.residence || '未填寫';
