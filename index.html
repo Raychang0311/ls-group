@@ -455,6 +455,7 @@
         }
 
         .waitlist-banner {
+            box-sizing: border-box;
             width: 100%;
             padding: 10px 12px;
             border-radius: 10px;
@@ -463,7 +464,8 @@
             color: #b45309;
             font-size: 0.88rem;
             font-weight: 600;
-            margin-bottom: 4px;
+            line-height: 1.45;
+            margin-bottom: 12px;
         }
 
         .member-item.is-waitlist {
@@ -1426,6 +1428,7 @@
                 <label for="userActionNote" class="note-input-label">活動備註 (選填，例如：開車+1、晚到半小時)</label>
                 <input type="text" id="userActionNote" class="note-input-field" maxlength="50" placeholder="請輸入備註文字...">
             </div>
+            <div id="waitlistStatusBanner" class="waitlist-banner" style="display: none;"></div>
             <div class="action-button-row" id="actionBtnRow">
                 <!-- 動態注入報名/改備註/退出/修改揪團按鈕 -->
             </div>
@@ -2131,6 +2134,7 @@
 
         const btnRow = document.getElementById('actionBtnRow');
         const noteInput = document.getElementById('userActionNote');
+        const waitlistBanner = document.getElementById('waitlistStatusBanner');
 
         const existingMember = globalJoinedList.find(m => String(m.id).toLowerCase() === currentUserId.toLowerCase());
         const isJoined = !!existingMember;
@@ -2148,6 +2152,10 @@
 
         if (isJoined) {
             // 已報名狀態：填入現有備註
+            if (waitlistBanner) {
+                waitlistBanner.style.display = 'none';
+                waitlistBanner.textContent = '';
+            }
             if (noteInput) noteInput.value = existingMember.note || '';
             btnRow.innerHTML = `
                 <button type="button" class="btn-act btn-update-note" onclick="handleUpdateNote()">
@@ -2161,8 +2169,11 @@
             // 候補中狀態
             const waitMember = globalWaitlist[waitIdx];
             if (noteInput) noteInput.value = waitMember.note || '';
+            if (waitlistBanner) {
+                waitlistBanner.style.display = 'block';
+                waitlistBanner.textContent = `⏳ 您目前為本活動候補第 ${waitIdx + 1} 順位，有名額釋出將自動遞補通知`;
+            }
             btnRow.innerHTML = `
-                <div class="waitlist-banner">⏳ 您目前為本活動候補第 ${waitIdx + 1} 順位，有名額釋出將自動遞補通知</div>
                 <button type="button" class="btn-act btn-update-note" onclick="handleUpdateNote()">
                     ✏️ 更新備註
                 </button>
@@ -2172,6 +2183,10 @@
             `;
         } else {
             // 未報名狀態：清空備註輸入框
+            if (waitlistBanner) {
+                waitlistBanner.style.display = 'none';
+                waitlistBanner.textContent = '';
+            }
             if (noteInput) noteInput.value = '';
             if (isFull) {
                 btnRow.innerHTML = `
