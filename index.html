@@ -444,6 +444,49 @@
             cursor: not-allowed;
         }
 
+        .btn-waitlist {
+            background-color: #fef3c7;
+            color: #b45309;
+            border: 1px solid #f59e0b;
+        }
+
+        .btn-waitlist:hover {
+            background-color: #fde68a;
+        }
+
+        .waitlist-banner {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            color: #b45309;
+            font-size: 0.88rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .member-item.is-waitlist {
+            background: rgba(254, 243, 199, 0.35);
+            border: 1px solid rgba(245, 158, 11, 0.35);
+            border-radius: 12px;
+            padding: 8px 4px;
+            position: relative;
+        }
+
+        .wait-order-pill {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            font-size: 0.68rem;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: 999px;
+            background: #fef3c7;
+            color: #b45309;
+            border: 1px solid rgba(245, 158, 11, 0.45);
+        }
+
         .btn-edit-group {
             background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
             color: white !important;
@@ -1402,6 +1445,18 @@
         <div class="member-grid" id="joinedList"></div>
     </div>
 
+    <!-- 候補名單卡片 -->
+    <div class="card" id="waitlistCard" style="display: none;">
+        <div class="section-header">
+            <div class="section-title">
+                ⏳ 候補名單
+                <span class="count-badge" id="waitlistCountDisplay" style="background:#fef3c7;color:#b45309;">0 人</span>
+            </div>
+        </div>
+
+        <div class="member-grid" id="waitlistList"></div>
+    </div>
+
 </div>
 
 <!-- 圖片放大 Lightbox -->
@@ -1551,6 +1606,7 @@
     let currentUserPic = '';
     let currentGroupData = null;
     let globalJoinedList = [];
+    let globalWaitlist = [];
     let globalJoinedNotesHistory = [];
     let globalJoinedNotes = {};
     let allMembers = [];
@@ -1914,8 +1970,9 @@
             icalBtn.classList.add('disabled');
         }
 
-        // 參加者名單與備註
+        // 參加者與候補名單與備註
         globalJoinedList = response.joinedList || [];
+        globalWaitlist = response.waitlist || [];
         globalJoinedNotesHistory = response.joinedNotesHistory || [];
         globalJoinedNotes = response.joinedNotes || {};
 
@@ -1932,44 +1989,63 @@
         }, 400);
     }
 
+    function buildMemberGridItemsHtml(list, isWaitlist) {
+        let html = '';
+        list.forEach((member, index) => {
+            const delay = index * 0.04;
+            const safeName = escapeHtml(member.name || '');
+            const safeNote = escapeHtml(member.note || '');
+            const safePic = escapeHtml(member.pic || 'https://imgur.com/786FxAA.jpg');
+            const isMe = (currentUserId && String(member.id).toLowerCase() === currentUserId.toLowerCase());
+
+            const noteHtml = (safeNote.trim() !== '')
+                ? `<div class="member-note" onclick="${isWaitlist ? `openWaitlistNoteHistoryModalByIndex(${index})` : `openNoteHistoryModalByIndex(${index})`}">
+                    <span class="member-note-btn">備註歷史</span>
+                    <span class="member-note-text">${safeNote}</span>
+                  </div>`
+                : '';
+
+            const orderBadge = isWaitlist ? `<span class="wait-order-pill">#${index + 1}</span>` : '';
+
+            html += `
+                <div class="member-item ${isWaitlist ? 'is-waitlist' : ''}" style="animation-delay: ${delay}s">
+                    ${orderBadge}
+                    <div class="avatar-container" data-member-id="${escapeHtml(member.id)}" onclick="openMemberProfile('${escapeHtml(member.id)}', this)" title="點擊查看數位名片">
+                        <img class="member-avatar" src="${safePic}" loading="lazy" />
+                        ${isMe ? '<span class="my-self-badge">我</span>' : ''}
+                    </div>
+                    <span class="member-name">${safeName}</span>
+                    ${noteHtml}
+                </div>
+            `;
+        });
+        return html;
+    }
+
     /**
-     * 渲染參加者網格列表
+     * 渲染參加者與候補網格列表
      */
     function renderMemberList() {
         const memberContainer = document.getElementById("joinedList");
-        let memberHtml = '';
-
         if (globalJoinedList && globalJoinedList.length > 0) {
-            globalJoinedList.forEach((member, index) => {
-                const delay = index * 0.04;
-                const safeName = escapeHtml(member.name || '');
-                const safeNote = escapeHtml(member.note || '');
-                const safePic = escapeHtml(member.pic || 'https://imgur.com/786FxAA.jpg');
-                const isMe = (currentUserId && String(member.id).toLowerCase() === currentUserId.toLowerCase());
-
-                const noteHtml = (safeNote.trim() !== '')
-                    ? `<div class="member-note" onclick="openNoteHistoryModalByIndex(${index})">
-                        <span class="member-note-btn">備註歷史</span>
-                        <span class="member-note-text">${safeNote}</span>
-                      </div>`
-                    : '';
-
-                memberHtml += `
-                    <div class="member-item" style="animation-delay: ${delay}s">
-                        <div class="avatar-container" data-member-id="${escapeHtml(member.id)}" onclick="openMemberProfile('${escapeHtml(member.id)}', this)" title="點擊查看數位名片">
-                            <img class="member-avatar" src="${safePic}" loading="lazy" />
-                            ${isMe ? '<span class="my-self-badge">我</span>' : ''}
-                        </div>
-                        <span class="member-name">${safeName}</span>
-                        ${noteHtml}
-                    </div>
-                `;
-            });
+            memberContainer.innerHTML = buildMemberGridItemsHtml(globalJoinedList, false);
         } else {
-            memberHtml = '<div style="grid-column: 1/-1; text-align: center; color: #999; padding: 20px 0;">尚無人報名</div>';
+            memberContainer.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: #999; padding: 20px 0;">尚無人報名</div>';
         }
 
-        memberContainer.innerHTML = memberHtml;
+        const waitCard = document.getElementById("waitlistCard");
+        const waitContainer = document.getElementById("waitlistList");
+        const waitCountEl = document.getElementById("waitlistCountDisplay");
+        if (waitCard && waitContainer) {
+            if (globalWaitlist && globalWaitlist.length > 0) {
+                waitCard.style.display = 'block';
+                if (waitCountEl) waitCountEl.textContent = `${globalWaitlist.length} 人`;
+                waitContainer.innerHTML = buildMemberGridItemsHtml(globalWaitlist, true);
+            } else {
+                waitCard.style.display = 'none';
+                waitContainer.innerHTML = '';
+            }
+        }
     }
 
     /**
@@ -2058,6 +2134,7 @@
 
         const existingMember = globalJoinedList.find(m => String(m.id).toLowerCase() === currentUserId.toLowerCase());
         const isJoined = !!existingMember;
+        const waitIdx = globalWaitlist.findIndex(m => String(m.id).toLowerCase() === currentUserId.toLowerCase());
 
         const maxLimit = parseInt((currentGroupData && currentGroupData.maxLimit), 10) || 99;
         const currentCount = globalJoinedList.length;
@@ -2080,13 +2157,26 @@
                     🚪 退出揪團
                 </button>
             `;
+        } else if (waitIdx !== -1) {
+            // 候補中狀態
+            const waitMember = globalWaitlist[waitIdx];
+            if (noteInput) noteInput.value = waitMember.note || '';
+            btnRow.innerHTML = `
+                <div class="waitlist-banner">⏳ 您目前為本活動候補第 ${waitIdx + 1} 順位，有名額釋出將自動遞補通知</div>
+                <button type="button" class="btn-act btn-update-note" onclick="handleUpdateNote()">
+                    ✏️ 更新備註
+                </button>
+                <button type="button" class="btn-act btn-leave" onclick="handleLeaveGroup()">
+                    🚪 退出揪團
+                </button>
+            `;
         } else {
             // 未報名狀態：清空備註輸入框
             if (noteInput) noteInput.value = '';
             if (isFull) {
                 btnRow.innerHTML = `
-                    <button type="button" class="btn-act btn-full" disabled>
-                        ❌ 人數已額滿 (${currentCount}/${maxLimit})
+                    <button type="button" class="btn-act btn-waitlist" onclick="handleJoinGroup()">
+                        ⏳ 已額滿 (${currentCount}/${maxLimit}) · 登記候補
                     </button>
                 `;
             } else {
@@ -2100,7 +2190,7 @@
     }
 
     /**
-     * 直接報名
+     * 直接報名或登記候補
      */
     function handleJoinGroup() {
         if (!currentUserId || !currentSeqId) {
@@ -2110,41 +2200,64 @@
 
         const noteInput = document.getElementById('userActionNote');
         const noteText = noteInput ? noteInput.value.trim() : '';
+        const maxLimit = parseInt((currentGroupData && currentGroupData.maxLimit), 10) || 99;
+        const isFull = (maxLimit !== 99 && globalJoinedList.length >= maxLimit);
 
         Swal.fire({
-            title: '確認報名',
-            text: noteText ? `備註：${noteText}` : '確定要參加這個揪團活動嗎？',
+            title: isFull ? '確認登記候補' : '確認報名',
+            text: isFull
+                ? (noteText ? `目前人數已滿，將加入候補名單（備註：${noteText}）` : '目前人數已滿，確定要加入候補名單嗎？有空缺將依序自動遞補並通知。')
+                : (noteText ? `備註：${noteText}` : '確定要參加這個揪團活動嗎？'),
             icon: 'question',
             showCancelButton: true,
             confirmButtonColor: '#4a8c72',
             cancelButtonColor: '#94a3b8',
-            confirmButtonText: '確定參加',
+            confirmButtonText: isFull ? '確定登記候補' : '確定參加',
             cancelButtonText: '取消'
         }).then((result) => {
             if (result.isConfirmed) {
                 Swal.fire({
-                    title: '報名處理中...',
+                    title: isFull ? '登記候補中...' : '報名處理中...',
                     allowOutsideClick: false,
                     didOpen: () => Swal.showLoading()
                 });
 
                 callGasApi('joinGroup', { seqId: currentSeqId, userId: currentUserId, noteText: noteText }, function(res) {
                     if (res && res.success) {
-                        Swal.fire('報名成功！', '您已成功加入本活動名單 🎉', 'success');
+                        if (res.waitlisted) {
+                            Swal.fire('已加入候補名單！', `您的候補順位為第 ${res.waitlistPos || 1} 位 ⏳`, 'success');
+                        } else {
+                            Swal.fire('報名成功！', '您已成功加入本活動名單 🎉', 'success');
+                        }
 
                         // 1. 即時樂觀更新本機名冊狀態
                         const myName = currentDisplayName || '已登入成員';
                         const myPic = currentUserPic || 'https://imgur.com/786FxAA.jpg';
-                        const existingIdx = globalJoinedList.findIndex(m => String(m.id).toLowerCase() === currentUserId.toLowerCase());
-                        if (existingIdx === -1) {
-                            globalJoinedList.push({
-                                id: currentUserId,
-                                name: myName,
-                                pic: myPic,
-                                note: noteText || ''
-                            });
+                        if (res.waitlisted) {
+                            const wIdx = globalWaitlist.findIndex(m => String(m.id).toLowerCase() === currentUserId.toLowerCase());
+                            if (wIdx === -1) {
+                                globalWaitlist.push({
+                                    id: currentUserId,
+                                    name: myName,
+                                    pic: myPic,
+                                    note: noteText || '',
+                                    waitlistPos: globalWaitlist.length + 1
+                                });
+                            } else {
+                                globalWaitlist[wIdx].note = noteText || '';
+                            }
                         } else {
-                            globalJoinedList[existingIdx].note = noteText || '';
+                            const existingIdx = globalJoinedList.findIndex(m => String(m.id).toLowerCase() === currentUserId.toLowerCase());
+                            if (existingIdx === -1) {
+                                globalJoinedList.push({
+                                    id: currentUserId,
+                                    name: myName,
+                                    pic: myPic,
+                                    note: noteText || ''
+                                });
+                            } else {
+                                globalJoinedList[existingIdx].note = noteText || '';
+                            }
                         }
 
                         if (!globalJoinedNotes) globalJoinedNotes = {};
@@ -2156,6 +2269,7 @@
 
                         if (currentGroupData) {
                             currentGroupData.joinedList = globalJoinedList;
+                            currentGroupData.waitlist = globalWaitlist;
                             currentGroupData.currentCount = globalJoinedList.length;
                         }
 
@@ -2194,7 +2308,8 @@
                 Swal.fire('更新成功！', '您的備註已成功儲存', 'success');
 
                 // 1. 即時更新本機名單中的成員備註
-                let member = globalJoinedList.find(m => String(m.id).toLowerCase() === currentUserId.toLowerCase());
+                let member = globalJoinedList.find(m => String(m.id).toLowerCase() === currentUserId.toLowerCase())
+                    || globalWaitlist.find(m => String(m.id).toLowerCase() === currentUserId.toLowerCase());
                 if (member) member.note = noteText;
 
                 if (!globalJoinedNotes) globalJoinedNotes = {};
@@ -2219,14 +2334,15 @@
     }
 
     /**
-     * 退出揪團
+     * 退出揪團 / 退出候補
      */
     function handleLeaveGroup() {
         if (!currentUserId || !currentSeqId) return;
+        const isWaitlisted = globalWaitlist.some(m => String(m.id).toLowerCase() === currentUserId.toLowerCase());
 
         Swal.fire({
-            title: '確定要退出揪團嗎？',
-            text: '退出後您的名額將釋出給其他夥伴',
+            title: isWaitlisted ? '確定要退出候補嗎？' : '確定要退出揪團嗎？',
+            text: isWaitlisted ? '退出後將取消您的候補順位' : '退出後您的名額將釋出給其他夥伴',
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#e53e3e',
@@ -2243,10 +2359,11 @@
 
                 callGasApi('leaveGroup', { seqId: currentSeqId, userId: currentUserId }, function(res) {
                     if (res && res.success) {
-                        Swal.fire('已退出', '您已退出本揪團活動', 'info');
+                        Swal.fire('已退出', res.leftType === 'waitlist' ? '您已退出本活動候補名單' : '您已退出本揪團活動', 'info');
 
-                        // 1. 即時從名單中剔除使用者並清空備註快取
+                        // 1. 即時從正取／候補名單中剔除使用者並清空備註快取
                         globalJoinedList = globalJoinedList.filter(m => String(m.id).toLowerCase() !== currentUserId.toLowerCase());
+                        globalWaitlist = globalWaitlist.filter(m => String(m.id).toLowerCase() !== currentUserId.toLowerCase());
                         if (globalJoinedNotes) {
                             delete globalJoinedNotes[currentUserId];
                             for (let k in globalJoinedNotes) {
@@ -2261,10 +2378,11 @@
                         // 3. 更新當前計數
                         if (currentGroupData) {
                             currentGroupData.joinedList = globalJoinedList;
+                            currentGroupData.waitlist = globalWaitlist;
                             currentGroupData.currentCount = globalJoinedList.length;
                         }
 
-                        // 4. 即時重新渲染名單與操作區 (切換回「立即報名」按鈕)
+                        // 4. 即時重新渲染名單與操作區
                         renderMemberList();
                         refreshUserActionArea();
 
@@ -3068,6 +3186,12 @@
     function openNoteHistoryModalByIndex(idx) {
         if (!globalJoinedList || !globalJoinedList[idx]) return;
         const member = globalJoinedList[idx];
+        openNoteHistoryModal(member.id, member.name);
+    }
+
+    function openWaitlistNoteHistoryModalByIndex(idx) {
+        if (!globalWaitlist || !globalWaitlist[idx]) return;
+        const member = globalWaitlist[idx];
         openNoteHistoryModal(member.id, member.name);
     }
 
