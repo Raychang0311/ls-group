@@ -343,6 +343,22 @@
             color: #e65100;
         }
 
+        .remind-banner {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 15px;
+            margin-bottom: 16px;
+            border-radius: 14px;
+            background: #fef3c7;
+            border: 1px solid rgba(180, 83, 9, 0.26);
+            color: #b45309;
+            font-size: 0.88rem;
+            font-weight: 600;
+            line-height: 1.5;
+            box-shadow: 0 4px 12px rgba(180, 83, 9, 0.08);
+        }
+
         /* 訪客提示盒 (電腦或未登入) */
         .guest-notice-box {
             display: flex;
@@ -1568,6 +1584,9 @@
         </div>
     </div>
 
+    <!-- 活動群組提醒提示 -->
+    <div id="remindBanner" class="remind-banner" style="display: none;"></div>
+
     <!-- 參加者名單卡片 -->
     <div class="card">
         <div class="section-header">
@@ -2157,6 +2176,22 @@
 
         // 重新判定使用者報名狀態與操作按鈕
         refreshUserActionArea();
+
+        // 顯示活動群組提醒設定（若 P 欄有設定提醒小時數）
+        const remindBannerEl = document.getElementById('remindBanner');
+        if (remindBannerEl) {
+            const remindVal = parseFloat(response.remindHours);
+            if (!isNaN(remindVal) && remindVal > 0) {
+                const timeText = remindVal < 1
+                    ? `${Math.max(1, Math.round(remindVal * 60))} 分鐘`
+                    : `${remindVal} 小時`;
+                remindBannerEl.textContent = `🔔 該揪團設定於活動開始前 ${timeText} 於群組內提醒參加者`;
+                remindBannerEl.style.display = 'flex';
+            } else {
+                remindBannerEl.textContent = '';
+                remindBannerEl.style.display = 'none';
+            }
+        }
 
         // 隱藏 Loading
         loadingEl.style.opacity = '0';
