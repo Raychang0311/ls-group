@@ -1335,10 +1335,143 @@
             margin-top: 50px;
             padding: 20px;
         }
+
+        /* LINE 登入閘道（無訪客模式） */
+        body:not(.is-authenticated) {
+            padding: 0 !important;
+        }
+
+        body:not(.is-authenticated) #loading,
+        body:not(.is-authenticated) #mainContainer,
+        body:not(.is-authenticated) #img-lightbox,
+        body:not(.is-authenticated) #tag-lightbox,
+        body:not(.is-authenticated) #note-history-lightbox,
+        body:not(.is-authenticated) #profileModalOverlay {
+            display: none !important;
+        }
+
+        .auth-gate {
+            position: fixed;
+            inset: 0;
+            z-index: 4000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: radial-gradient(circle at 20% 15%, rgba(74, 140, 114, 0.14), transparent 55%), var(--bg);
+        }
+
+        .auth-gate[hidden] {
+            display: none !important;
+        }
+
+        .auth-gate__card {
+            width: min(420px, 100%);
+            background: rgba(255, 255, 255, 0.92);
+            -webkit-backdrop-filter: blur(22px) saturate(145%);
+            backdrop-filter: blur(22px) saturate(145%);
+            border: 1px solid rgba(255, 255, 255, 0.85);
+            border-radius: 20px;
+            padding: 32px 24px 26px;
+            box-shadow: 0 24px 52px -20px rgba(16, 26, 22, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+            text-align: center;
+        }
+
+        .auth-gate__logo {
+            width: 68px;
+            height: 68px;
+            margin: 0 auto 18px;
+            border-radius: 18px;
+            background: var(--primary-dark);
+            color: #ffffff;
+            font-weight: 700;
+            font-size: 1.35rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 8px 20px -10px rgba(58, 110, 89, 0.45);
+        }
+
+        .auth-gate__logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .auth-gate__checking {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 0;
+        }
+
+        .auth-gate__checking[hidden],
+        .auth-gate__blocked[hidden] {
+            display: none !important;
+        }
+
+        .auth-gate__title {
+            margin: 0 0 10px;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .auth-gate__desc {
+            margin: 0;
+            font-size: 0.93rem;
+            line-height: 1.6;
+            color: var(--text-sub);
+        }
+
+        .auth-gate__actions {
+            margin-top: 22px;
+        }
+
+        .btn-gate-login {
+            width: 100%;
+            min-height: 44px;
+            border: none;
+            border-radius: 12px;
+            background: var(--primary-dark);
+            color: #ffffff;
+            font-family: inherit;
+            font-size: 0.95rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
     </style>
 </head>
 
 <body>
+
+<!-- LINE 登入閘道（無訪客模式） -->
+<div id="authGate" class="auth-gate" role="dialog" aria-modal="true" aria-labelledby="authGateTitle">
+    <div class="auth-gate__card">
+        <div class="auth-gate__logo">
+            <img src="https://obs.line-scdn.net/0hTp0LmYC8C18NNRtkYlJ0CF1oAD0-VxVULwEfOChdVgh7VjpTMi8tWiheVmYjfhN1OQMbSSlOCg8obj5iMTIhTnJlHgxgVjVudjgPRmlJIB98VSkIdw/f256x256" alt="L&gt;S Logo" referrerpolicy="no-referrer" onerror="this.replaceWith(document.createTextNode('L>S'))">
+        </div>
+        <div id="authGateChecking" class="auth-gate__checking">
+            <div class="spinner" aria-hidden="true"></div>
+            <p class="auth-gate__desc">正在驗證 LINE 登入狀態...</p>
+        </div>
+        <div id="authGateBlocked" class="auth-gate__blocked" hidden>
+            <h1 id="authGateTitle" class="auth-gate__title">請登入 LINE 以繼續</h1>
+            <p id="authGateMsg" class="auth-gate__desc">本社群揪團詳情僅限群組成員透過 LINE 帳號登入使用，請點擊下方按鈕登入 LINE。</p>
+            <div class="auth-gate__actions">
+                <button type="button" id="authGateLoginBtn" class="btn-gate-login" onclick="triggerLineLogin()">🔑 登入 LINE</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <div id="loading">
     <div class="spinner"></div>
@@ -1616,19 +1749,55 @@
     let targetMapUrl = '';
     let leafletMap = null;
     let serverTitleConfig = null;
+    let activeLiffId = DEFAULT_LIFF_ID;
+    let liffReady = false;
+    let groupAppStarted = false;
+
+    function unlockAuthenticatedApp() {
+        document.body.classList.add('is-authenticated');
+        const gate = document.getElementById('authGate');
+        if (gate) gate.hidden = true;
+        if (!groupAppStarted) {
+            groupAppStarted = true;
+            loadGroupContent(currentSeqId);
+            preloadMembersDirectory();
+        }
+    }
+
+    function showLoginGate(title, message) {
+        document.body.classList.remove('is-authenticated');
+        const gate = document.getElementById('authGate');
+        const checking = document.getElementById('authGateChecking');
+        const blocked = document.getElementById('authGateBlocked');
+        const titleEl = document.getElementById('authGateTitle');
+        const msgEl = document.getElementById('authGateMsg');
+        if (gate) gate.hidden = false;
+        if (checking) checking.hidden = true;
+        if (blocked) blocked.hidden = false;
+        if (titleEl) titleEl.textContent = title || '無法自動登入 LINE';
+        if (msgEl) msgEl.textContent = message || '本社群揪團詳情僅限群組成員透過 LINE 帳號登入使用，請點擊下方按鈕登入 LINE。';
+    }
+
+    function triggerLineLogin() {
+        if (window.liff && activeLiffId) {
+            if (liffReady) {
+                try {
+                    liff.login({ redirectUri: window.location.href });
+                    return;
+                } catch (e) {}
+            }
+            const suffix = currentSeqId ? ('?seqId=' + encodeURIComponent(currentSeqId)) : '';
+            window.location.href = 'https://liff.line.me/' + encodeURIComponent(activeLiffId) + suffix;
+        }
+    }
 
     document.addEventListener('DOMContentLoaded', function() {
-        // 1. 初始化身分認證 (多重架構：後端注入 + Context + ID Token + Profile + 本地持久化)
+        currentSeqId = window.SERVER_SEQ_ID || extractQueryParam('seqId') || extractQueryParam('id') || '1';
+
+        // 1. 初始化身分認證，通過後才解鎖載入揪團內容
         initLiffAuth();
 
-        // 2. 獲取 URL 或 state 參數中的 seqId 並向後端拉取資料
-        currentSeqId = window.SERVER_SEQ_ID || extractQueryParam('seqId') || extractQueryParam('id') || '1';
-        loadGroupContent(currentSeqId);
-
-        // 3. 背景非同步預先載入全體成員名冊 (比照 members/ 模式，個人名片 0ms 秒開)
-        preloadMembersDirectory();
-
-        // 4. 綁定個人名片滾動時自動關閉 Tooltip
+        // 2. 綁定個人名片滾動時自動關閉 Tooltip
         const modalBody = document.querySelector('.profile-card-modal .modal-body');
         if (modalBody) {
             modalBody.addEventListener('scroll', hideBadgeTooltip);
@@ -1671,7 +1840,14 @@
      * LIFF 身分驗證 (由 LINE 官方 SDK 自動嚴格驗證，禁止手動自選或竄改)
      */
     function initLiffAuth() {
-        const liffId = extractQueryParam('liffId') || DEFAULT_LIFF_ID;
+        activeLiffId = extractQueryParam('liffId') || DEFAULT_LIFF_ID;
+        let authFinished = false;
+        const finishAuthCheck = () => {
+            if (authFinished) return;
+            authFinished = true;
+            if (currentUserId) unlockAuthenticatedApp();
+            else showLoginGate();
+        };
 
         // 1. 檢查後端 GAS doGet(e) 伺服器端注入之 User ID
         if (window.SERVER_USER_ID) {
@@ -1695,27 +1871,30 @@
             }
         } catch (e) {}
 
+        if (currentUserId) finishAuthCheck();
+
         // 4. 若在 Google Apps Script iframe 環境中，嘗試透過 getLocation 取得參數
         if (window.google && google.script && google.script.url) {
             google.script.url.getLocation(function(loc) {
                 if (loc && loc.parameter) {
-                    const pUid = loc.parameter.userId || loc.parameter.uid;
-                    if (pUid && !currentUserId) {
-                        handleLoginSuccess(pUid, 'LINE 使用者');
-                    }
                     const pSeq = loc.parameter.seqId;
                     if (pSeq && (!currentSeqId || currentSeqId === '1')) {
                         currentSeqId = pSeq;
-                        loadGroupContent(currentSeqId);
+                        if (groupAppStarted) loadGroupContent(currentSeqId);
+                    }
+                    const pUid = loc.parameter.userId || loc.parameter.uid;
+                    if (pUid && !currentUserId) {
+                        handleLoginSuccess(pUid, 'LINE 使用者');
+                        finishAuthCheck();
                     }
                 }
             });
         }
 
         // 5. 初始化 LINE LIFF SDK (正式官方認證，防竄改)
-        if (window.liff) {
-            liff.init({ liffId: liffId }).then(() => {
-                // 優先檢查 Context (在 LINE 聊天室開啟時無需額外登入授權即可直接取得)
+        if (window.liff && activeLiffId) {
+            liff.init({ liffId: activeLiffId }).then(() => {
+                liffReady = true;
                 try {
                     const context = liff.getContext();
                     if (context && context.userId && !currentUserId) {
@@ -1723,7 +1902,6 @@
                     }
                 } catch (e) {}
 
-                // 檢查 Decoded ID Token
                 try {
                     const idToken = liff.getDecodedIDToken();
                     if (idToken && idToken.sub && !currentUserId) {
@@ -1731,26 +1909,28 @@
                     }
                 } catch (e) {}
 
-                // 檢查 Profile
                 if (liff.isLoggedIn()) {
-                    liff.getProfile().then(profile => {
+                    return liff.getProfile().then(profile => {
                         if (profile && profile.pictureUrl) {
                             currentUserPic = profile.pictureUrl;
                             try { localStorage.setItem('ls_member_pic', profile.pictureUrl); } catch (e) {}
                         }
-                        handleLoginSuccess(profile.userId, profile.displayName);
+                        if (profile && profile.userId) {
+                            handleLoginSuccess(profile.userId, profile.displayName);
+                        }
+                        finishAuthCheck();
                     }).catch(err => {
                         console.warn("LIFF getProfile 失敗:", err);
+                        finishAuthCheck();
                     });
-                } else if (!liff.isInClient()) {
-                    if (!currentUserId) updateAuthUI(false);
                 }
+                finishAuthCheck();
             }).catch(err => {
                 console.log("LIFF 初始化或訪客環境:", err);
-                if (!currentUserId) updateAuthUI(false);
+                finishAuthCheck();
             });
         } else {
-            if (!currentUserId) updateAuthUI(false);
+            finishAuthCheck();
         }
     }
 
@@ -1765,7 +1945,7 @@
         } catch (e) {}
 
         updateAuthUI(true, currentDisplayName);
-        if (currentGroupData) {
+        if (groupAppStarted && currentGroupData) {
             renderMemberList();
             refreshUserActionArea();
         }
@@ -1802,13 +1982,7 @@
     }
 
     function redirectToLiffAuth() {
-        if (window.liff) {
-            // 在頂層視窗 (GitHub Pages) 下直接跳轉官方 LINE Login，絕不觸發 ERR_BLOCKED_BY_RESPONSE
-            liff.login();
-            return;
-        }
-        const liffUrl = 'https://liff.line.me/' + DEFAULT_LIFF_ID + (currentSeqId ? ('?seqId=' + encodeURIComponent(currentSeqId)) : '');
-        window.location.href = liffUrl;
+        triggerLineLogin();
     }
 
     /**
